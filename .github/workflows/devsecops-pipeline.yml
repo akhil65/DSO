@@ -80,36 +80,34 @@ jobs:
 
   # ----------------------------------------------------------
   # MODULE 2 — CodeQL (GitHub native SAST)
-  # Scans JavaScript for security vulnerabilities
+  # Scans JavaScript source code for security vulnerabilities
+  # Unlocked in Module 2 when vulnerable sample app is added
   # Free for public repositories
   # ----------------------------------------------------------
-  codeql:
-    name: "M2 · CodeQL SAST"
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    strategy:
-      matrix:
-        language: [javascript]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-          queries: security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: codeql-${{ matrix.language }}
+  # codeql:
+  #   name: "M2 · CodeQL SAST"
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     security-events: write
+  #     actions: read
+  #     contents: read
+  #   strategy:
+  #     matrix:
+  #       language: [javascript]
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Initialize CodeQL
+  #       uses: github/codeql-action/init@v3
+  #       with:
+  #         languages: ${{ matrix.language }}
+  #         queries: security-and-quality
+  #     - name: Autobuild
+  #       uses: github/codeql-action/autobuild@v3
+  #     - name: Perform CodeQL Analysis
+  #       uses: github/codeql-action/analyze@v3
+  #       with:
+  #         category: codeql-${{ matrix.language }}
 
   # ----------------------------------------------------------
   # MODULE 2 — SAST: Bandit (Python) — unlock in Module 2
