@@ -1,0 +1,57 @@
+# ===========================
+# DevSecOps Lab .gitignore
+# ===========================
+
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+*.secret
+secrets/
+credentials/
+
+# Docker volumes / local state
+dvwa-db-data/
+portainer_data/
+
+# SAST / DAST output reports (generated, not source)
+**/reports/*.xml
+**/reports/*.json
+**/reports/*.html
+zap-report.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.python-version
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Trivy cache
+.trivy/
+
+# Metasploit logs
+*.log
+msf_history
+
+# Burp Suite project files (may contain sensitive session data)
+*.burp
+
+# Semgrep cache
+.semgrep/

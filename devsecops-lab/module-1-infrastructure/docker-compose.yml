@@ -1,0 +1,116 @@
+# ============================================================
+# MODULE 1 — DevSecOps Lab Infrastructure
+# Targets: OWASP Juice Shop + DVWA
+# Usage:
+#   docker compose up -d
+#   Juice Shop → http://localhost:3000
+#   DVWA       → http://localhost:8080  (admin / password)
+# ============================================================
+
+version: "3.9"
+
+networks:
+  devsecops-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  dvwa-db-data:
+
+services:
+
+  # ----------------------------------------------------------
+  # 1. OWASP Juice Shop
+  #    Deliberately insecure Node.js web app
+  #    Covers OWASP Top 10 vulnerabilities
+  # ----------------------------------------------------------
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    container_name: juice-shop
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      devsecops-lab:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "devsecops.module=1"
+      - "devsecops.target=juice-shop"
+
+  # ----------------------------------------------------------
+  # 2. Damn Vulnerable Web Application (DVWA)
+  #    Classic PHP/MySQL vulnerable web app
+  #    Covers SQLi, XSS, CSRF, File Upload, Command Injection
+  # ----------------------------------------------------------
+  dvwa-db:
+    image: mariadb:10.11
+    container_name: dvwa-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: dvwa_root_password
+      MYSQL_DATABASE: dvwa
+      MYSQL_USER: dvwa
+      MYSQL_PASSWORD: p@ssw0rd
+    volumes:
+      - dvwa-db-data:/var/lib/mysql
+    networks:
+      devsecops-lab:
+        ipv4_address: 172.20.0.20
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "dvwa", "-pp@ssw0rd"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: dvwa
+    restart: unless-stopped
+    depends_on:
+      dvwa-db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      - DB_SERVER=dvwa-db
+      - DB_DATABASE=dvwa
+      - DB_USER=dvwa
+      - DB_PASSWORD=p@ssw0rd
+    networks:
+      devsecops-lab:
+        ipv4_address: 172.20.0.21
+    labels:
+      - "devsecops.module=1"
+      - "devsecops.target=dvwa"
+
+  # ----------------------------------------------------------
+  # 3. Portainer (optional) — Docker GUI for lab management
+  #    Access → http://localhost:9000
+  #    Useful for beginners to visualise running containers
+  # ----------------------------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      devsecops-lab:
+        ipv4_address: 172.20.0.30
+    labels:
+      - "devsecops.module=1"
+      - "devsecops.target=management"
+
+volumes:
+  dvwa-db-data:
+  portainer_data:
