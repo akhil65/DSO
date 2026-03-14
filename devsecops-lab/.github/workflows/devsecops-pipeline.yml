@@ -1,14 +1,16 @@
 # ============================================================
 # DevSecOps CI/CD Pipeline — GitHub Actions
-# STATUS: Stub — populated module by module
+# Repo: https://github.com/akhil65/DSO
 #
-# Current active jobs:
-#   [Module 1]  ✅ docker-validate   — validate compose file
-#   [Module 2]  🔒 sast-bandit       — Python SAST (locked until M2)
-#   [Module 2]  🔒 sast-semgrep      — multi-language SAST (locked)
-#   [Module 2]  🔒 sca-trivy         — container/dep scanning (locked)
-#   [Module 3]  🔒 dast-zap          — OWASP ZAP headless (locked)
-#   [Module 5]  🔒 full-pipeline     — orchestrated run (locked)
+# Active jobs per module:
+#   [Module 1]  ✅ docker-validate     — YAML syntax check
+#   [Module 1]  ✅ ossf-scorecard      — repo security posture score
+#   [Module 2]  ✅ codeql              — GitHub SAST (unlocked here)
+#   [Module 2]  🔒 sast-bandit         — Python SAST (uncomment in M2)
+#   [Module 2]  🔒 sast-semgrep        — multi-language SAST (uncomment in M2)
+#   [Module 2]  🔒 sca-trivy           — container CVE scan (uncomment in M2)
+#   [Module 2]  🔒 sca-osv             — Google OSV dependency scan (uncomment in M2)
+#   [Module 3]  🔒 dast-zap            — OWASP ZAP headless (uncomment in M3)
 # ============================================================
 
 name: DevSecOps Pipeline
@@ -18,7 +20,13 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
-  workflow_dispatch:       # manual trigger from GitHub UI
+  schedule:
+    # OSSF Scorecard requires a weekly scheduled run
+    - cron: '30 1 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -40,8 +48,75 @@ jobs:
           echo "✅ docker-compose.yml is valid"
 
   # ----------------------------------------------------------
+  # MODULE 1 — OSSF Scorecard
+  # Scores the repo's overall security posture across 18 checks:
+  # branch protection, dependency pinning, CI hygiene, secrets, etc.
+  # Results appear in GitHub Security tab → Code scanning alerts
+  # ----------------------------------------------------------
+  ossf-scorecard:
+    name: "M1 · OSSF Scorecard"
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run OSSF Scorecard
+        uses: ossf/scorecard-action@v2.4.0
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload Scorecard results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scorecard-results.sarif
+          category: ossf-scorecard
+
+  # ----------------------------------------------------------
+  # MODULE 2 — CodeQL (GitHub native SAST)
+  # Analyses JavaScript (Juice Shop) for security vulnerabilities
+  # Results appear in GitHub Security tab → Code scanning alerts
+  # Free for public repositories
+  # ----------------------------------------------------------
+  codeql:
+    name: "M2 · CodeQL SAST"
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      matrix:
+        language: [javascript]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql-${{ matrix.language }}
+
+  # ----------------------------------------------------------
   # MODULE 2 — SAST: Bandit (Python)
-  # Uncomment when Module 2 is complete
+  # Uncomment when Module 2 sample vulnerable app is added
   # ----------------------------------------------------------
   # sast-bandit:
   #   name: "M2 · SAST — Bandit"
@@ -52,11 +127,11 @@ jobs:
   #       run: |
   #         pip install bandit
   #         bandit -r module-2-sast/sample-vulnerable-app/ \
-  #               -f json -o reports/bandit-report.json || true
+  #               -f json -o bandit-report.json || true
   #     - uses: actions/upload-artifact@v4
   #       with:
   #         name: bandit-report
-  #         path: reports/bandit-report.json
+  #         path: bandit-report.json
 
   # ----------------------------------------------------------
   # MODULE 2 — SAST: Semgrep
@@ -74,7 +149,7 @@ jobs:
   #           p/javascript
 
   # ----------------------------------------------------------
-  # MODULE 2 — SCA: Trivy (container scan)
+  # MODULE 2 — SCA: Trivy (container + filesystem scan)
   # ----------------------------------------------------------
   # sca-trivy:
   #   name: "M2 · SCA — Trivy"
@@ -85,9 +160,34 @@ jobs:
   #       uses: aquasecurity/trivy-action@master
   #       with:
   #         image-ref: bkimminich/juice-shop:latest
-  #         format: table
-  #         exit-code: '0'
+  #         format: sarif
+  #         output: trivy-results.sarif
   #         severity: CRITICAL,HIGH
+  #     - uses: github/codeql-action/upload-sarif@v3
+  #       with:
+  #         sarif_file: trivy-results.sarif
+  #         category: trivy
+
+  # ----------------------------------------------------------
+  # MODULE 2 — SCA: OSV Scanner (Google)
+  # Scans dependencies against Google's Open Source Vulnerability DB
+  # ----------------------------------------------------------
+  # sca-osv:
+  #   name: "M2 · SCA — OSV Scanner"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: google/osv-scanner-action@v1
+  #       with:
+  #         scan-args: |-
+  #           --recursive
+  #           --format sarif
+  #           --output osv-results.sarif
+  #           ./
+  #     - uses: github/codeql-action/upload-sarif@v3
+  #       with:
+  #         sarif_file: osv-results.sarif
+  #         category: osv-scanner
 
   # ----------------------------------------------------------
   # MODULE 3 — DAST: OWASP ZAP Baseline
@@ -103,5 +203,4 @@ jobs:
   #       uses: zaproxy/action-baseline@v0.11.0
   #       with:
   #         target: http://localhost:3000
-  #         rules_file_name: module-3-dast/zap-rules.tsv
   #         artifact_name: zap-baseline-report
