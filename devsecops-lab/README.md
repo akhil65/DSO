@@ -9,8 +9,8 @@
 | Module | Topic | Status |
 |--------|-------|--------|
 | [Module 1](./module-1-infrastructure/) | Infrastructure & Lab Setup (Docker, Juice Shop, DVWA) | ✅ Complete |
-| [Module 2](./module-2-sast/) | Static Analysis — SAST & SCA (Bandit, Semgrep, Trivy) | ✅ In Progress |
-| [Module 3](./module-3-dast/) | Dynamic Analysis — DAST (OWASP ZAP, headless CI) | 🔒 Locked |
+| [Module 2](./module-2-sast/) | Static Analysis — SAST & SCA (Bandit, Semgrep, Trivy, OSV Scanner) | ✅ Complete |
+| [Module 3](./module-3-dast/) | Dynamic Analysis — DAST (OWASP ZAP, headless CI) | ✅ In Progress |
 | [Module 4](./module-4-pentesting/) | Manual Pentesting (Burp Suite, SQLi, XSS, CSRF) | 🔒 Locked |
 | [Module 5](./module-5-pipeline/) | CI/CD Pipeline Automation (GitHub Actions / GitLab CI) | 🔒 Locked |
 | [Module 6](./module-6-ai-security/) | AI Application Security & MLSecOps (Prompt Injection, STRIDE-GPT) | 🔒 Locked |
@@ -55,6 +55,12 @@ Detailed guides for each module live in the [`docs/`](./docs/) folder.
 | 2026-03-13 | Module 1 | DVWA configured at Low security, Portainer dashboard live |
 | 2026-03-13 | Module 2 | Vulnerable Python app created — 10 deliberate vulnerabilities |
 | 2026-03-13 | Module 2 | Bandit, Semgrep, Trivy, OSV Scanner added to CI pipeline |
+| 2026-03-14 | Module 2 | Bandit scan — 29 Python findings across 9 vulnerability categories |
+| 2026-03-14 | Module 2 | Semgrep scan — 43 findings (Python + JS), SSRF and XSS taint tracking |
+| 2026-03-14 | Module 2 | Trivy scan — 136 CVEs + 4 secrets in requirements.txt and Juice Shop image |
+| 2026-03-14 | Module 2 | OSV scan — 50 CVEs, 7 unique vs Trivy (wider PYSEC database coverage) |
+| 2026-03-14 | Module 2 | 4 vulnerability reports generated: Bandit, Semgrep, Trivy, OSV |
+| 2026-03-14 | Module 3 | DAST with OWASP ZAP — baseline + active scan against Juice Shop |
 
 ---
 
