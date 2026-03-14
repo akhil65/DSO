@@ -5,11 +5,11 @@
 # Active jobs:
 #   [Module 1]  ✅ docker-validate     — YAML syntax check
 #   [Module 1]  ✅ ossf-scorecard      — repo security posture score
-#   [Module 2]  ✅ codeql              — GitHub SAST (free for public repos)
-#   [Module 2]  🔒 sast-bandit         — Python SAST (uncomment in M2)
-#   [Module 2]  🔒 sast-semgrep        — multi-language SAST (uncomment in M2)
-#   [Module 2]  🔒 sca-trivy           — container CVE scan (uncomment in M2)
-#   [Module 2]  🔒 sca-osv             — Google OSV dependency scan (uncomment in M2)
+#   [Module 2]  ✅ sast-bandit         — Python SAST
+#   [Module 2]  ✅ sast-semgrep        — multi-language SAST
+#   [Module 2]  ✅ sca-trivy           — container CVE scan
+#   [Module 2]  ✅ sca-osv             — Google OSV dependency scan
+#   [Module 2]  🔒 codeql              — GitHub SAST (needs JS source — unlock after M2 app added)
 #   [Module 3]  🔒 dast-zap            — OWASP ZAP headless (uncomment in M3)
 # ============================================================
 
@@ -110,77 +110,72 @@ jobs:
   #         category: codeql-${{ matrix.language }}
 
   # ----------------------------------------------------------
-  # MODULE 2 — SAST: Bandit (Python) — unlock in Module 2
+  # MODULE 2 — SAST: Bandit (Python)
   # ----------------------------------------------------------
-  # sast-bandit:
-  #   name: "M2 · SAST — Bandit"
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Run Bandit
-  #       run: |
-  #         pip install bandit
-  #         bandit -r devsecops-lab/module-2-sast/sample-vulnerable-app/ \
-  #               -f json -o bandit-report.json || true
-  #     - uses: actions/upload-artifact@v4
-  #       with:
-  #         name: bandit-report
-  #         path: bandit-report.json
+  sast-bandit:
+    name: "M2 · SAST — Bandit"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Bandit
+        run: |
+          pip install bandit
+          bandit -r devsecops-lab/module-2-sast/sample-vulnerable-app/ \
+                -f json -o bandit-report.json || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
 
   # ----------------------------------------------------------
-  # MODULE 2 — SAST: Semgrep — unlock in Module 2
+  # MODULE 2 — SAST: Semgrep
   # ----------------------------------------------------------
-  # sast-semgrep:
-  #   name: "M2 · SAST — Semgrep"
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: returntocorp/semgrep-action@v1
-  #       with:
-  #         config: >-
-  #           p/owasp-top-ten
-  #           p/python
-  #           p/javascript
+  sast-semgrep:
+    name: "M2 · SAST — Semgrep"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/python
 
   # ----------------------------------------------------------
-  # MODULE 2 — SCA: Trivy — unlock in Module 2
+  # MODULE 2 — SCA: Trivy
   # ----------------------------------------------------------
-  # sca-trivy:
-  #   name: "M2 · SCA — Trivy"
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Run Trivy on Juice Shop image
-  #       uses: aquasecurity/trivy-action@master
-  #       with:
-  #         image-ref: bkimminich/juice-shop:latest
-  #         format: sarif
-  #         output: trivy-results.sarif
-  #         severity: CRITICAL,HIGH
-  #     - uses: github/codeql-action/upload-sarif@v3
-  #       with:
-  #         sarif_file: trivy-results.sarif
-  #         category: trivy
+  sca-trivy:
+    name: "M2 · SCA — Trivy"
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy on requirements.txt
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: devsecops-lab/module-2-sast/sample-vulnerable-app/
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
 
   # ----------------------------------------------------------
-  # MODULE 2 — SCA: OSV Scanner (Google) — unlock in Module 2
+  # MODULE 2 — SCA: OSV Scanner (Google)
   # ----------------------------------------------------------
-  # sca-osv:
-  #   name: "M2 · SCA — OSV Scanner"
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: google/osv-scanner-action@v1
-  #       with:
-  #         scan-args: |-
-  #           --recursive
-  #           --format sarif
-  #           --output osv-results.sarif
-  #           ./
-  #     - uses: github/codeql-action/upload-sarif@v3
-  #       with:
-  #         sarif_file: osv-results.sarif
-  #         category: osv-scanner
+  sca-osv:
+    name: "M2 · SCA — OSV Scanner"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google/osv-scanner-action@v1.9.0
+        with:
+          scan-args: |-
+            --lockfile=devsecops-lab/module-2-sast/sample-vulnerable-app/requirements.txt
 
   # ----------------------------------------------------------
   # MODULE 3 — DAST: OWASP ZAP — unlock in Module 3

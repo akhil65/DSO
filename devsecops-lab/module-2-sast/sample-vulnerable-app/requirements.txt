@@ -1,0 +1,11 @@
+# Deliberately using outdated versions with known CVEs
+# Trivy and OSV Scanner will flag these
+
+flask==2.0.1           # CVE-2023-30861 — cookie session vulnerability
+werkzeug==2.0.1        # CVE-2023-25577 — multipart parsing DoS
+jinja2==3.0.1          # CVE-2024-34064 — XSS via xmlattr filter
+lxml==4.6.3            # CVE-2021-43818 — XSS via HTML5 parser
+requests==2.25.1       # CVE-2023-32681 — proxy credential leak
+cryptography==3.4.7    # CVE-2023-49083 — NULL pointer dereference
+pyyaml==5.3.1          # CVE-2020-14343 — arbitrary code execution
+pillow==8.2.0          # CVE-2021-34552 — buffer overflow

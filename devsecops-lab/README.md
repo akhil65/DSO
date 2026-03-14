@@ -9,7 +9,7 @@
 | Module | Topic | Status |
 |--------|-------|--------|
 | [Module 1](./module-1-infrastructure/) | Infrastructure & Lab Setup (Docker, Juice Shop, DVWA) | ✅ Complete |
-| [Module 2](./module-2-sast/) | Static Analysis — SAST & SCA (Bandit, Semgrep, Trivy) | 🔓 Up Next |
+| [Module 2](./module-2-sast/) | Static Analysis — SAST & SCA (Bandit, Semgrep, Trivy) | ✅ In Progress |
 | [Module 3](./module-3-dast/) | Dynamic Analysis — DAST (OWASP ZAP, headless CI) | 🔒 Locked |
 | [Module 4](./module-4-pentesting/) | Manual Pentesting (Burp Suite, SQLi, XSS, CSRF) | 🔒 Locked |
 | [Module 5](./module-5-pipeline/) | CI/CD Pipeline Automation (GitHub Actions / GitLab CI) | 🔒 Locked |
@@ -53,6 +53,8 @@ Detailed guides for each module live in the [`docs/`](./docs/) folder.
 | 2026-03-13 | Module 1 | Lab infrastructure provisioned — Juice Shop + DVWA |
 | 2026-03-13 | Module 1 | First SQL injection executed — bypassed Juice Shop admin login |
 | 2026-03-13 | Module 1 | DVWA configured at Low security, Portainer dashboard live |
+| 2026-03-13 | Module 2 | Vulnerable Python app created — 10 deliberate vulnerabilities |
+| 2026-03-13 | Module 2 | Bandit, Semgrep, Trivy, OSV Scanner added to CI pipeline |
 
 ---
 
