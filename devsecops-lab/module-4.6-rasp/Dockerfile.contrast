@@ -1,0 +1,36 @@
+# ─── Exercise 4.6.3 — Contrast RASP v3 ──────────────────────────────────────
+# @contrast/rasp-v3 is the open-source RASP core from Contrast Security (pre-release).
+# It instruments Node.js internals (http, crypto, child_process, sqlite3) to detect
+# and block OWASP attacks at runtime — no Contrast server or account required.
+#
+# Build: docker compose --profile contrast-rasp build
+# Run:   docker compose --profile contrast-rasp up -d
+# Logs:  docker compose logs -f juice-shop-contrast-rasp
+# Test:  curl -s "http://localhost:3003/rest/products/search?q='" | python3 -m json.tool
+
+# ─── Stage 1: install @contrast/rasp-v3 (needs npm + build tools) ─────────────
+FROM node:20-alpine AS builder
+WORKDIR /build
+
+# Install the pre-release RASP core.
+# Pin to known version; upgrade after testing.
+RUN npm install @contrast/rasp-v3@0.7.0-alpha.5 --save --ignore-scripts 2>&1 | tail -5
+
+COPY contrast-rasp-wrapper.js /build/contrast-rasp-wrapper.js
+
+# ─── Stage 2: inject into distroless Juice Shop ───────────────────────────────
+FROM bkimminich/juice-shop:latest
+
+# Copy the entire @contrast scope (rasp-v3 + its deps) into a dedicated directory.
+# Using --chmod=755 so uid 65532 (nobody) can traverse subdirectories.
+COPY --from=builder --chmod=755 /build/node_modules/@contrast /juice-shop/contrast_modules/@contrast
+
+# Copy our thin wrapper that loads and initializes rasp-v3.
+COPY --from=builder --chmod=644 /build/contrast-rasp-wrapper.js /juice-shop/contrast-rasp-wrapper.js
+
+# NODE_OPTIONS --require loads the wrapper before any app code runs.
+# The wrapper then requires /juice-shop/contrast_modules/@contrast/rasp-v3 explicitly
+# so Node.js module resolution works regardless of working directory.
+ENV NODE_OPTIONS="--require /juice-shop/contrast-rasp-wrapper.js"
+
+EXPOSE 3000

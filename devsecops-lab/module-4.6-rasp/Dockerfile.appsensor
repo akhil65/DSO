@@ -1,0 +1,26 @@
+# ─── Exercise 4.6.4 — OWASP AppSensor (in-process Node.js hook) ──────────────
+# Implements AppSensor escalating response: LOG → WARN(429) → BLOCK(403)
+# based on per-IP detection point counters.  No external dependencies.
+#
+# Build: docker compose --profile appsensor build
+# Run:   docker compose --profile appsensor up -d
+# Logs:  docker compose logs -f juice-shop-appsensor
+#
+# Test escalation (run 5× in quick succession from same IP):
+#   for i in {1..6}; do
+#     echo -n "Hit $i: "
+#     curl -s -o /dev/null -w "%{http_code}" \
+#       "http://localhost:3004/rest/products/search?q=%27%20OR%201%3D1--"
+#     echo
+#   done
+#
+# Expected: 200, 200, 200, 429, 403, 403  (LOG×3 → WARN → BLOCK)
+
+FROM bkimminich/juice-shop:latest
+
+# appsensor-hook.js is pure Node.js — no npm deps, no build stage needed.
+COPY --chmod=644 appsensor-hook.js /juice-shop/appsensor-hook.js
+
+ENV NODE_OPTIONS="--require /juice-shop/appsensor-hook.js"
+
+EXPOSE 3000

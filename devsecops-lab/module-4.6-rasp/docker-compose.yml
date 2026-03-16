@@ -1,6 +1,15 @@
 services:
 
-  # ─── Exercise 4.6.1 / 4.6.2 — Juice Shop + OpenRASP agent ────────────────
+  # ─── Exercise 4.6.1 / 4.6.2 — Custom RASP hook (rasp-hook.js) ───────────────
+  # Hand-rolled RASP: patches Module._load (sqlite3) + Module.prototype.require
+  # (Sequelize) via NODE_OPTIONS --require.  No external deps.
+  #
+  #   docker compose --profile openrasp build
+  #   docker compose --profile openrasp up -d
+  #   curl -s -o /dev/null -w "%{http_code}" \
+  #     "http://localhost:3002/rest/products/search?q=%27%20OR%201%3D1--"
+  #   → 403
+
   juice-shop-rasp:
     build:
       context: .
@@ -8,44 +17,169 @@ services:
     image: juice-shop-openrasp:local
     container_name: juice-shop-rasp
     ports:
-      - "3002:3000"   # port 3000 = original Juice Shop; 3002 = RASP-protected copy
+      - "3002:3000"
     environment:
       - NODE_ENV=production
-      - OPENRASP_CONFIG=/juice-shop/openrasp.yml
     volumes:
       - rasp-logs:/juice-shop/logs
     restart: unless-stopped
     profiles:
       - openrasp
 
-  # ─── Exercise 4.6.3 — Contrast CE agent ───────────────────────────────────
-  # Requires free account at https://app.contrastsecurity.com/
-  # Set CONTRAST__API__URL, CONTRAST__API__USER_NAME, CONTRAST__API__API_KEY,
-  # CONTRAST__API__SERVICE_KEY in a .env file before running.
-  juice-shop-contrast:
-    image: bkimminich/juice-shop:latest
-    container_name: juice-shop-contrast
+
+  # ─── Exercise 4.6.3 — Contrast RASP v3 (@contrast/rasp-v3) ──────────────────
+  # Open-source RASP core from Contrast Security (pre-release alpha).
+  # NOTE: Contrast Community Edition reached EOL June 30 2025.
+  # @contrast/rasp-v3 is the OSS successor — no account or API key needed.
+  # Multi-stage build: npm install in node:20-alpine, COPY into distroless.
+  #
+  #   docker compose --profile contrast-rasp build
+  #   docker compose --profile contrast-rasp up -d
+  #   docker compose logs -f juice-shop-contrast-rasp
+  #   curl -s -o /dev/null -w "%{http_code}" \
+  #     "http://localhost:3003/rest/products/search?q=%27%20OR%201%3D1--"
+
+  juice-shop-contrast-rasp:
+    build:
+      context: .
+      dockerfile: Dockerfile.contrast
+    image: juice-shop-contrast-rasp:local
+    container_name: juice-shop-contrast-rasp
     ports:
-      - "3003:3000"   # port 3003 = Contrast CE-protected copy
+      - "3003:3000"
     environment:
       - NODE_ENV=production
-      # Contrast CE config — fill these in .env
-      - CONTRAST__API__URL=${CONTRAST__API__URL:-https://app.contrastsecurity.com/Contrast}
-      - CONTRAST__API__USER_NAME=${CONTRAST__API__USER_NAME}
-      - CONTRAST__API__API_KEY=${CONTRAST__API__API_KEY}
-      - CONTRAST__API__SERVICE_KEY=${CONTRAST__API__SERVICE_KEY}
-      - CONTRAST__APPLICATION__NAME=juice-shop-lab
-      - CONTRAST__APPLICATION__ENVIRONMENT=development
-      # Inject Contrast agent via NODE_OPTIONS — no code change needed
-      - NODE_OPTIONS=--require @contrast/agent
     volumes:
-      - contrast-logs:/juice-shop/logs
-    command: >
-      sh -c "npm install --prefix /juice-shop @contrast/agent && node /juice-shop/app.js"
+      - contrast-rasp-logs:/juice-shop/logs
     restart: unless-stopped
     profiles:
-      - contrast
+      - contrast-rasp
+
+
+  # ─── Exercise 4.6.4 — OWASP AppSensor (in-process escalating response) ────────
+  # AppSensor-style detection with proportional response per source IP:
+  #   1st hit → LOG (pass through)
+  #   3rd hit → WARN (HTTP 429)
+  #   5th hit → BLOCK (HTTP 403)
+  # Detection points: IE1 (URL SQLi), IE2 (DB SQLi), ACE1 (force-browse), RE1 (long param)
+  # Pure Node.js — no npm dependencies, single-stage Dockerfile.
+  #
+  #   docker compose --profile appsensor build
+  #   docker compose --profile appsensor up -d
+  #
+  #   # Test escalation (6× from same IP):
+  #   for i in {1..6}; do
+  #     echo -n "Hit $i: "
+  #     curl -s -o /dev/null -w "%{http_code}" \
+  #       "http://localhost:3004/rest/products/search?q=%27%20OR%201%3D1--"
+  #     echo
+  #   done
+  #   # Expected: 200, 200, 200, 429, 403, 403
+
+  juice-shop-appsensor:
+    build:
+      context: .
+      dockerfile: Dockerfile.appsensor
+    image: juice-shop-appsensor:local
+    container_name: juice-shop-appsensor
+    ports:
+      - "3004:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - appsensor-logs:/juice-shop/logs
+    restart: unless-stopped
+    profiles:
+      - appsensor
+
+
+  # ─── Exercise 4.6.5 — Datadog ASM (Sqreen successor) ─────────────────────────
+  # Sqreen (2017–2021) pioneered Node.js RASP-as-a-service.
+  # Acquired by Datadog (~$260M, 2021); technology became Datadog ASM.
+  # libddwaf (bundled, Apache 2.0) handles blocking locally — no DD account needed.
+  # DD_API_KEY is OPTIONAL — only required for the Datadog dashboard.
+  #
+  # Blocking without Datadog account:  YES — libddwaf rules are bundled locally
+  # Dashboard/triage/threat-intel:     Requires free Datadog trial (14 days)
+  #   Sign up: https://app.datadoghq.com/signup
+  #
+  #   docker compose --profile datadog-asm build
+  #   docker compose --profile datadog-asm up -d
+  #   curl -s -o /dev/null -w "%{http_code}" \
+  #     "http://localhost:3005/rest/products/search?q=%27%20OR%201%3D1--"
+  #   → 403 (blocked by libddwaf locally)
+
+  juice-shop-datadog:
+    build:
+      context: .
+      dockerfile: Dockerfile.datadog
+    image: juice-shop-datadog-asm:local
+    container_name: juice-shop-datadog
+    ports:
+      - "3005:3000"
+    environment:
+      - NODE_ENV=production
+      - DD_ENV=lab
+      - DD_SERVICE=juice-shop
+      - DD_VERSION=1.0.0
+      - DD_APPSEC_ENABLED=true
+      # Optional — set DD_API_KEY in .env to connect Datadog dashboard:
+      - DD_API_KEY=${DD_API_KEY:-}
+      - DD_AGENT_HOST=${DD_AGENT_HOST:-localhost}
+    volumes:
+      - datadog-logs:/juice-shop/logs
+    restart: unless-stopped
+    profiles:
+      - datadog-asm
+
+
+  # ─── Exercise 4.6.6 — Signal Sciences / Fastly Next-Gen WAF (architecture) ───
+  # Signal Sciences uses a HYBRID sidecar model — NOT pure in-process RASP:
+  #   sigsci-module-nodejs  →  sigsci-agent (local daemon)  →  Signal Sciences cloud
+  # The middleware is open-source (Apache 2.0); agent + cloud = enterprise license.
+  #   Request a trial: https://www.fastly.com/products/web-application-api-protection
+  #
+  # Set in .env before running:
+  #   SIGSCI_ACCESSKEYID=<your-key>
+  #   SIGSCI_SECRETACCESSKEY=<your-secret>
+  #
+  #   docker compose --profile sigsci up -d
+  #
+  # Study: sigsci-middleware-example.js — architecture diagram + middleware code
+
+  juice-shop-sigsci:
+    image: bkimminich/juice-shop:latest
+    container_name: juice-shop-sigsci
+    ports:
+      - "3006:3000"
+    depends_on:
+      - sigsci-agent
+    environment:
+      - NODE_ENV=production
+      - SIGSCI_AGENT_HOST=sigsci-agent
+      - SIGSCI_AGENT_PORT=9999
+    volumes:
+      - sigsci-logs:/juice-shop/logs
+    restart: unless-stopped
+    profiles:
+      - sigsci
+
+  sigsci-agent:
+    image: signalsciences/sigsci-agent:latest
+    container_name: sigsci-agent
+    environment:
+      - SIGSCI_ACCESSKEYID=${SIGSCI_ACCESSKEYID:-REPLACE_WITH_YOUR_KEY}
+      - SIGSCI_SECRETACCESSKEY=${SIGSCI_SECRETACCESSKEY:-REPLACE_WITH_YOUR_SECRET}
+    ports:
+      - "9999:9999"
+    restart: unless-stopped
+    profiles:
+      - sigsci
+
 
 volumes:
   rasp-logs:
-  contrast-logs:
+  contrast-rasp-logs:
+  appsensor-logs:
+  datadog-logs:
+  sigsci-logs:

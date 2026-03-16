@@ -11,27 +11,42 @@ RASP instruments the application FROM WITHIN — unlike a WAF which sits outside
 | Position | External reverse proxy | Inside app runtime |
 | Sees | Raw HTTP before decoding | Decoded data at function call level |
 | Bypass risk | Higher — encoding tricks may evade rules | Lower — sees actual query sent to DB |
-| Example | ModSecurity, Cloudflare WAF | OpenRASP, Contrast CE |
+| Examples | ModSecurity, Cloudflare WAF | rasp-hook.js, Contrast RASP v3, Datadog ASM |
 
 ## Tools Covered
 
-| Tool | Type | Language | Notes |
-|------|------|----------|-------|
-| OpenRASP (Baidu) | RASP agent | Node.js, Java, PHP | Most mature open-source RASP |
-| Contrast Community Edition | RASP agent + dashboard | Node.js, Java | Free tier, best UI for learning |
-| OWASP AppSensor | Detection framework | Java | Conceptual — detection + response patterns |
+| Tool | Type | Account needed? | Port |
+|------|------|-----------------|------|
+| Custom rasp-hook.js | RASP (hand-rolled) | None | 3002 |
+| Contrast RASP v3 (`@contrast/rasp-v3`) | RASP (OSS alpha) | None | 3003 |
+| OWASP AppSensor (appsensor-hook.js) | Detection + escalating response | None | 3004 |
+| Datadog ASM (Sqreen successor) | RASP-as-a-service | Optional (dashboard only) | 3005 |
+| Signal Sciences / Fastly Next-Gen WAF | Hybrid WAF/RASP sidecar | Enterprise license | 3006 |
+
+> **Note on Contrast CE:** Contrast Community Edition reached EOL on June 30, 2025 and is no longer available.  Exercise 4.6.3 uses `@contrast/rasp-v3`, the open-source RASP core Contrast published on npm.
 
 ## Files in This Module
 
 ```
 module-4.6-rasp/
-├── README.md              ← This file
-├── docker-compose.yml     ← Orchestrates juice-shop-rasp (port 3002) + juice-shop-contrast (port 3003)
-├── Dockerfile             ← Multi-stage build: copies rasp-hook.js into distroless Juice Shop image
-├── rasp-hook.js           ← Custom RASP agent: patches sqlite3 + Sequelize at require() time
-├── openrasp.yml           ← OpenRASP agent configuration reference (block mode, hooks)
-├── appsensor-config.xml   ← OWASP AppSensor detection point rules (conceptual)
-└── .env.example           ← Contrast CE credentials template
+├── README.md                    ← This file
+├── docker-compose.yml           ← All 5 Juice Shop variants (ports 3002–3006)
+│
+├── Dockerfile                   ← 4.6.1/4.6.2: custom rasp-hook.js (openrasp profile)
+├── rasp-hook.js                 ← Custom RASP: patches sqlite3 + Sequelize at require()
+│
+├── Dockerfile.contrast          ← 4.6.3: @contrast/rasp-v3 (contrast-rasp profile)
+├── contrast-rasp-wrapper.js     ← Loads + initialises @contrast/rasp-v3
+│
+├── Dockerfile.appsensor         ← 4.6.4: AppSensor hook (appsensor profile)
+├── appsensor-hook.js            ← AppSensor: LOG→WARN(429)→BLOCK(403) per IP
+├── appsensor-config.xml         ← AppSensor detection point reference
+│
+├── Dockerfile.datadog           ← 4.6.5: Datadog ASM / dd-trace (datadog-asm profile)
+├── datadog-rasp-wrapper.js      ← Initialises dd-trace with appsec.enabled=true
+│
+├── sigsci-middleware-example.js ← 4.6.6: Signal Sciences architecture + middleware code
+└── openrasp.yml                 ← OpenRASP config reference (informational)
 ```
 
 ## Prerequisites
@@ -47,12 +62,16 @@ module-4.6-rasp/
 |---|----------|------|--------|
 | 4.6.1 | Deploy custom RASP agent in Juice Shop via Docker | rasp-hook.js | ✅ Complete |
 | 4.6.2 | Verify SQLi blocked at runtime (not at HTTP layer) | rasp-hook.js | ✅ Complete |
-| 4.6.3 | Connect Contrast CE agent + view attack dashboard | Contrast CE | 🔲 Pending |
-| 4.6.4 | Review OWASP AppSensor detection rules | AppSensor | 🔲 Pending |
+| 4.6.3 | Deploy Contrast RASP v3 (OSS npm package, no account) | @contrast/rasp-v3 | 🔲 Pending |
+| 4.6.4 | Implement AppSensor escalating response (LOG→WARN→BLOCK) | appsensor-hook.js | 🔲 Pending |
+| 4.6.5 | Deploy Datadog ASM — the Sqreen successor | dd-trace + libddwaf | 🔲 Pending |
+| 4.6.6 | Study Signal Sciences hybrid WAF/RASP sidecar architecture | sigsci-middleware-example.js | 🔲 Pending |
+
+---
 
 ## Exercise 4.6.1 — Deploy Custom RASP Agent in Juice Shop (Docker) ✅
 
-Uses a multi-stage Dockerfile to inject `rasp-hook.js` into the distroless Juice Shop image via `NODE_OPTIONS --require`. The hook patches `sqlite3`, `Sequelize`, and `http.ServerResponse` before any app code runs.
+Uses a multi-stage Dockerfile to inject `rasp-hook.js` into the distroless Juice Shop image via `NODE_OPTIONS --require`. The hook patches `sqlite3`, `Sequelize` before any app code runs.
 
 > **Why custom instead of OpenRASP?** `@baidu/openrasp` requires native bindings that can't compile inside the distroless Juice Shop image (no shell, no build tools). The custom hook achieves the same patching mechanism — `Module._load` intercept + `NODE_OPTIONS --require` — and is more readable for learning.
 
@@ -76,6 +95,8 @@ info: Server listening on port 3000
 ```
 
 > **Ports:** Original Juice Shop = 3000, WAF-protected = 3001, RASP-protected = 3002
+
+---
 
 ## Exercise 4.6.2 — Verify SQLi Blocked at Runtime ✅
 
@@ -105,78 +126,266 @@ docker compose logs juice-shop-rasp | grep "BLOCKED"
 
 The hook intercepts the Sequelize `.query()` call with the fully-constructed SQL string — **the database driver never receives the malicious query**.
 
-## Exercise 4.6.3 — Contrast CE Agent + Dashboard
+---
 
-1. Sign up free at [app.contrastsecurity.com](https://app.contrastsecurity.com)
-2. After login: **User menu → Your Account → Download Agent → Node.js**
-3. Copy your `CONTRAST__API__*` credentials from that page into `.env`:
+## Exercise 4.6.3 — Contrast RASP v3 (OSS npm package)
 
-```bash
-cp .env.example .env
-# Edit .env and fill in your Contrast CE credentials
-nano .env
-```
+**Context:** Contrast Community Edition (CE) reached **end-of-life June 30, 2025** and is no longer available. `@contrast/rasp-v3` is the open-source RASP core Contrast published on npm — no account, no API key, no server connection required. It's pre-release (v0.7.0-alpha.5) but installable and usable for lab purposes.
 
-4. Start the Contrast-instrumented Juice Shop:
+**What it instruments:** Similar to `rasp-hook.js` — hooks into Node.js module internals to intercept dangerous operations at the runtime level. The key difference: Contrast's ruleset covers a broader attack surface (XSS, path traversal, SSRF, command injection) beyond just SQLi.
 
 ```bash
-docker compose --profile contrast up -d
+cd module-4.6-rasp
+
+docker compose --profile contrast-rasp build
+docker compose --profile contrast-rasp up -d
+sleep 20
+docker compose logs -f juice-shop-contrast-rasp
 ```
 
-5. Generate traffic to trigger detections:
+**Expected startup log:**
+```
+[Contrast RASP v3] Loading agent from /juice-shop/contrast_modules/@contrast/rasp-v3
+[Contrast RASP v3] Initialized via rasp.enable() ✓
+```
+
+If the log shows `WARNING: no known init method found`, check the exports printed and update `contrast-rasp-wrapper.js` to match the actual API shape — the package is alpha and the API may have changed.
+
+**Test blocking:**
+```bash
+# SQLi — should return 403 if Contrast RASP v3 initialised correctly
+curl -s -o /dev/null -w "Contrast RASP '(: %{http_code}\n" \
+  "http://localhost:3003/rest/products/search?q=%27%28"
+
+curl -s -o /dev/null -w "Contrast OR 1=1: %{http_code}\n" \
+  "http://localhost:3003/rest/products/search?q=%27+OR+1%3D1--"
+
+curl -s -o /dev/null -w "Contrast clean:  %{http_code}\n" \
+  "http://localhost:3003/rest/products/search?q=apple"
+```
+
+**Compare with custom rasp-hook.js:**
+```bash
+# Side-by-side: custom RASP (3002) vs Contrast RASP v3 (3003)
+for PORT in 3002 3003; do
+  echo -n "Port $PORT OR 1=1: "
+  curl -s -o /dev/null -w "%{http_code}" \
+    "http://localhost:${PORT}/rest/products/search?q=%27+OR+1%3D1--"
+  echo
+done
+```
+
+**Why this matters over rasp-hook.js:**  A commercial/semi-commercial RASP covers dozens of attack categories via a maintained ruleset. Our custom hook covers only SQLi patterns we wrote by hand — `@contrast/rasp-v3` should handle XSS, path traversal, SSRF, and command injection out of the box.
+
+---
+
+## Exercise 4.6.4 — OWASP AppSensor (Escalating Response)
+
+**AppSensor philosophy:** Instead of blocking every first occurrence (RASP), AppSensor escalates proportionally based on how many attacks originate from a given IP. One accidental bad request gets logged; repeated attacks get blocked. This reduces false positives for legitimate users who trigger a single anomaly.
+
+**`appsensor-hook.js` detection points:**
+
+| DP | What it detects | Source |
+|----|----------------|--------|
+| IE1 | SQLi pattern visible in URL query string | http.Server emit hook |
+| IE2 | SQLi reaching sqlite3/Sequelize driver | Module._load + require() patch |
+| ACE1 | Force-browsing to admin/config/git paths | http.Server emit hook |
+| RE1 | URL query string > 512 characters | http.Server emit hook |
+
+**Thresholds (tunable in `appsensor-hook.js`):**
+
+| Hit # | Action | HTTP Status |
+|-------|--------|-------------|
+| 1–2 | LOG — anomaly recorded, request passes | 200 |
+| 3–4 | WARN — attacker slowed down | 429 Too Many Requests |
+| 5+ | BLOCK — attacker fully denied | 403 Forbidden |
+| 10+ | (conceptual) DISABLE_ACCOUNT / CAPTCHA gate | — |
+
+Counters reset after 10 minutes of inactivity per IP.
 
 ```bash
-# SQLi probe — Contrast will detect and display in dashboard
-curl "http://localhost:3003/rest/products/search?q='("
-
-# Auth bypass attempt
-curl -s -X POST http://localhost:3003/rest/user/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"' OR 1=1--","password":"x"}'
+docker compose --profile appsensor build
+docker compose --profile appsensor up -d
+sleep 20
+docker compose logs juice-shop-appsensor | grep AppSensor
 ```
 
-6. Open [app.contrastsecurity.com](https://app.contrastsecurity.com) → **Applications → juice-shop-lab → Attacks** and observe detected attack events in real time.
+**Test escalation (run from same IP, 6× in quick succession):**
+```bash
+for i in {1..6}; do
+  echo -n "Hit $i: "
+  curl -s -o /dev/null -w "%{http_code}" \
+    "http://localhost:3004/rest/products/search?q=%27+OR+1%3D1--"
+  echo
+done
+```
 
-> **What you see in Contrast dashboard:** Each attack shows the exact stacktrace — which function call in Juice Shop triggered the detection, the exact SQL string that was about to execute, the source line in `routes/search.js`, and the HTTP request that triggered it. This is the key RASP advantage: you see root cause, not just "403 blocked."
+**Expected output:**
+```
+Hit 1: 200    ← LOG — passes through
+Hit 2: 200    ← LOG
+Hit 3: 429    ← WARN — rate limited
+Hit 4: 429    ← WARN
+Hit 5: 403    ← BLOCK
+Hit 6: 403    ← BLOCK
+```
 
-## Exercise 4.6.4 — OWASP AppSensor Detection Rules
+**Watch the escalation in logs:**
+```bash
+docker compose logs -f juice-shop-appsensor | grep AppSensor
+# [AppSensor] LOG    | DP=IE1 | IP=172.17.0.1 | count=1 | url_param=' OR 1=1--
+# [AppSensor] LOG    | DP=IE1 | IP=172.17.0.1 | count=2 | url_param=' OR 1=1--
+# [AppSensor] WARN   | DP=IE1 | IP=172.17.0.1 | count=3 | url_param=' OR 1=1--
+# [AppSensor] BLOCK  | DP=IE1 | IP=172.17.0.1 | count=5 | url_param=' OR 1=1--
+```
 
-AppSensor is a **detection framework** — it defines when application-layer events constitute an attack, then escalates the response proportionally. Unlike OpenRASP (blocks inline) or a WAF (blocks at HTTP layer), AppSensor is typically embedded in the application code itself as a library.
+**Test ACE1 — force-browse to admin path:**
+```bash
+curl -s -o /dev/null -w "ACE1 admin path: %{http_code}\n" \
+  "http://localhost:3004/admin"
+```
 
-Review `appsensor-config.xml` — key detection points relevant to Juice Shop:
+**AppSensor vs RASP — key distinction:** RASP throws inline at the first attack. AppSensor trades some risk on hit 1 and 2 to dramatically reduce false positives from security scanners, automated crawlers, and misconfigured integrations that fire a single bad request and should not be blocked permanently.
 
-| ID | What it detects | Juice Shop scenario |
-|----|----------------|---------------------|
-| AE1 | 5+ failed logins in 5 min | Admin login brute force (Module 4) |
-| AE2 | SQLi/XSS pattern in login fields | `' OR 1=1--` in email field |
-| IE2 | SQLi in any input | `/rest/products/search?q='(` |
-| ACE1 | IDOR — accessing resource not owned | `GET /rest/basket/2` when userId=1 |
-| SE3 | Tampered session token | Modified JWT signature |
+---
 
-The detection point threshold for IE2 (SQLi) is set to **count=1, interval=1 minute** — a single injection attempt immediately fires the response chain: log → block 60 minutes → alert security team.
+## Exercise 4.6.5 — Datadog ASM (Sqreen Successor)
 
-This is the key AppSensor insight: **the application itself is the sensor**. It knows context that no external tool can know — who the logged-in user is, what resource they own, what's a valid vs invalid object reference.
+**The Sqreen story:**
+
+| Year | Event |
+|------|-------|
+| 2017 | Sqreen founded; first RASP-as-a-service for Node.js via `--require` hook |
+| 2018 | Sqreen launches automatic WAF rules + account suspension |
+| 2021 | Datadog acquires Sqreen (~$260M); agent integrated into `dd-trace` |
+| 2022 | Datadog open-sources libddwaf (WAF/RASP engine, Apache 2.0) |
+| 2023 | `dd-trace` v4: `DD_APPSEC_ENABLED=true` enables inline blocking with bundled OWASP CRS-based rules |
+| 2024 | Sqreen npm package last published 3+ years ago — **officially deprecated** |
+
+**Key insight:** Datadog ASM's blocking is enforced **locally** by libddwaf — the bundled rule engine. You do **not** need a Datadog account to block attacks. `DD_API_KEY` is only required to send attack events to the Datadog dashboard.
+
+```bash
+docker compose --profile datadog-asm build
+docker compose --profile datadog-asm up -d
+sleep 25  # dd-trace init takes slightly longer
+docker compose logs juice-shop-datadog | grep -i "datadog\|appsec\|ASM"
+```
+
+**Expected startup log:**
+```
+[Datadog ASM] Loading dd-trace from /juice-shop/dd_modules/dd-trace
+[Datadog ASM] dd-trace initialized — AppSec blocking: ENABLED
+[Datadog ASM] libddwaf rules: bundled (no cloud connection required for blocking)
+[Datadog ASM] Dashboard: requires DD_API_KEY + free Datadog trial account
+```
+
+**Test blocking (libddwaf, no account needed):**
+```bash
+curl -s -o /dev/null -w "Datadog ASM OR 1=1: %{http_code}\n" \
+  "http://localhost:3005/rest/products/search?q=%27+OR+1%3D1--"
+# → 403 — blocked by libddwaf locally
+
+curl -s -o /dev/null -w "Datadog ASM clean:  %{http_code}\n" \
+  "http://localhost:3005/rest/products/search?q=apple"
+# → 200 — passes
+```
+
+**Optional — connect Datadog dashboard (free 14-day trial):**
+```bash
+# 1. Sign up: https://app.datadoghq.com/signup
+# 2. Create API key: https://app.datadoghq.com/organization-settings/api-keys
+# 3. Add to .env:
+echo "DD_API_KEY=your_key_here" >> .env
+
+# 4. Restart with key:
+docker compose --profile datadog-asm down
+docker compose --profile datadog-asm up -d
+
+# 5. View attacks: https://app.datadoghq.com/security/appsec
+```
+
+**What the dashboard shows (Sqreen heritage):** Each blocked attack displays the full request, source IP, matched rule, and — crucially — the **stacktrace inside Node.js** showing which line of Juice Shop code processed the malicious input. This is the core Sqreen innovation that Datadog inherited: root-cause visibility, not just block/allow logging.
+
+**Compare all three in-process RASP agents side by side:**
+```bash
+for PORT in 3002 3003 3004 3005; do
+  echo -n "Port $PORT (hit 1): "
+  curl -s -o /dev/null -w "%{http_code}" \
+    "http://localhost:${PORT}/rest/products/search?q=%27+OR+1%3D1--"
+  echo
+done
+# 3002 = custom hook, 3003 = Contrast, 3004 = AppSensor (LOG only on hit 1), 3005 = Datadog ASM
+```
+
+---
+
+## Exercise 4.6.6 — Signal Sciences / Fastly Next-Gen WAF (Architecture Study)
+
+**Status:** Enterprise license required — no free tier. This exercise is an architecture study using `sigsci-middleware-example.js`.
+
+**Why Signal Sciences is different from all the above:**
+
+Signal Sciences does NOT run entirely in-process. It uses a **sidecar daemon** model:
+
+```
+┌─────────────────────┐   ① HTTP request metadata   ┌────────────────────────┐
+│  Node.js App         │ ──────────────────────────→ │  sigsci-agent          │
+│  (Express middleware)│ ←────────────────────────── │  (local daemon :9999)  │
+└─────────────────────┘   ② allow / block decision   └───────────┬────────────┘
+                                                                  │ ③ telemetry
+                                                                  ▼
+                                                       Signal Sciences Cloud
+                                                       (dashboard, rule updates)
+```
+
+This makes it a **hybrid** — it has in-process visibility (the middleware runs inside Node.js, sees decoded request data) but the blocking decision is made **outside** the process by the agent daemon.
+
+**Architecture comparison — all tools in this module:**
+
+| Property | rasp-hook.js | Contrast RASP v3 | AppSensor | Datadog ASM | Signal Sciences |
+|---|---|---|---|---|---|
+| Position | In-process | In-process | In-process | In-process | In-process + sidecar |
+| Blocking | Synchronous throw | Synchronous throw | Synchronous throw | Synchronous throw | Agent daemon decision |
+| Block latency | 0 ms | 0 ms | 0 ms | 0 ms | ~0.1–1 ms (socket) |
+| Data access | SQL/API level | SQL/API level | HTTP + SQL level | HTTP + SQL level | HTTP request metadata |
+| Crash isolation | Bug = app crash | Bug = app crash | Bug = app crash | Bug = app crash | Agent crash ≠ app crash |
+| Ruleset | Custom (SQLi only) | Maintained OSS | Custom thresholds | libddwaf (OWASP CRS) | SigSci cloud rules |
+| Account | None | None | None | Optional | Required (enterprise) |
+| Cost | Free | Free | Free | Free (blocking) | Enterprise |
+
+**Study `sigsci-middleware-example.js`** — it contains the middleware registration code, architecture diagram, and a detailed comparison table. Running it requires `sigsci-module-nodejs` installed and `sigsci-agent` daemon running (enterprise only):
+
+```bash
+# Architecture only — do NOT run without enterprise credentials
+cat module-4.6-rasp/sigsci-middleware-example.js
+```
+
+**Key insight from Signal Sciences architecture:** The sidecar model provides crash isolation (agent crash doesn't affect app) and enables centralized rule updates without app redeployment. But it introduces a network hop that pure in-process RASP avoids. For blocking at microsecond latency (e.g., payment APIs, authentication endpoints), in-process RASP wins. For centralized policy management across many services, the sidecar model wins.
+
+---
 
 ## Key Concepts
 
-- **RASP hooks at the driver level** — `sqlite3.run()` is patched before app code runs; the agent sees the final SQL string regardless of how it was encoded in the HTTP request
+- **RASP hooks at the driver level** — `sqlite3.run()` is patched before app code runs; the agent sees the final SQL string regardless of how it was encoded in HTTP
 - **WAF can be bypassed by double-encoding; RASP cannot** — by the time RASP sees the data, Node.js has decoded it fully
-- **Contrast CE stacktraces** give root cause: exact source file + line + SQL string — not just "attack blocked"
-- **AppSensor is context-aware** — it knows session owner, normal request patterns, and resource ownership; no external tool has this knowledge
-- **Three complementary layers:** WAF (HTTP perimeter) + RASP (runtime enforcement) + AppSensor (application-layer detection) = defense in depth
+- **AppSensor vs RASP** — RASP blocks immediately; AppSensor trades hit-1 false-negative risk for dramatically lower false-positive rate across legitimate users
+- **Sqreen's lasting legacy** — the `NODE_OPTIONS --require` injection pattern, per-request stacktrace visibility, and account suspension response are all Sqreen innovations now embedded in Datadog ASM
+- **Signal Sciences is not pure RASP** — it's "next-gen WAF" because the decision happens outside the process; still vastly better than a traditional WAF because the in-process module sends decoded request context
+- **Defense in depth:** WAF (HTTP perimeter) + RASP (runtime enforcement) + AppSensor (application-layer detection with context) + commercial agent (threat intel + dashboard)
 
 ## Roadblocks & Fixes
 
 | Roadblock | Fix |
 |-----------|-----|
-| `@baidu/openrasp` npm install fails — distroless image has no shell | Replaced with custom `rasp-hook.js` injected via multi-stage Dockerfile + `NODE_OPTIONS --require` |
+| `/bin/sh: stat /bin/sh: no such file or directory` during Docker build | Distroless Juice Shop image has no shell; use multi-stage build with `node:20-alpine` as builder |
 | `EACCES: permission denied, open '/juice-shop/rasp-hook.js'` | Juice Shop runs as uid 65532 (nobody); fix: `COPY --chmod=644` in Dockerfile |
 | RASP false-positives block Juice Shop startup (CREATE TABLE) | Added `isDdl()` guard — skips all DDL statements that Sequelize runs internally |
-| Broad `/LIKE\s+'%[^']*'[^%'\\]/i` pattern blocked internal background queries | Replaced with precise `/LIKE\s+'%'[^%']/i` — only fires when `'` appears right after the opening `%` |
+| Broad LIKE pattern blocked internal background queries | Replaced with precise `/LIKE\s+'%'[^%']/i` — only fires when `'` appears right after opening `%` |
 | Regex merged onto comment line by formatter (pattern became dead code) | Ensured pattern is on its own line, separated from the `//` comment above it |
-| Contrast CE free tier quota exhausted | Free tier allows one application; delete old app in dashboard before re-adding |
-| Port 3002 already in use | Change `3002:3000` to `3004:3000` in docker-compose.yml |
-| Contrast agent not showing in dashboard | Wait 2–3 minutes; check `docker compose logs juice-shop-contrast` for auth errors |
+| Contrast CE EOL (June 30, 2025) | Replaced with `@contrast/rasp-v3` — no account needed |
+| `@contrast/rasp-v3` unknown init API (alpha) | `contrast-rasp-wrapper.js` tries all 5 known init shapes; logs exports if none match |
+| Sqreen npm package defunct | Replaced with `dd-trace` + `DD_APPSEC_ENABLED=true`; libddwaf blocks locally without DD account |
+| Signal Sciences requires enterprise license | Architecture study exercise; `sigsci-middleware-example.js` documents the sidecar model |
 
 ## Report
 
