@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OWASP AppSensor Detection Rules — Module 4.6.4
+
+  AppSensor is a detection framework, not a blocking proxy. It defines
+  "detection points" — application events that indicate attack behavior.
+  When enough points fire, it escalates the response (log → block → disable account).
+
+  Reference: https://owasp.org/www-project-appsensor/
+  Detection point catalog: https://owasp.org/www-project-appsensor/#div-detection_points
+-->
+
+<appsensor-config>
+
+  <!-- ── Detection Points ──────────────────────────────────────────────── -->
+  <detection-points>
+
+    <!-- RE1 — Unexpected HTTP Command (method not allowed for endpoint) -->
+    <detection-point id="RE1" category="Request">
+      <description>Unexpected HTTP method used on an endpoint</description>
+      <threshold count="3" interval="5" unit="minutes"/>
+      <responses>
+        <response action="log" />
+        <response action="disable_component" id="endpoint"/>
+      </responses>
+    </detection-point>
+
+    <!-- RE2 — Attempt to invoke unsupported HTTP method -->
+    <detection-point id="RE2" category="Request">
+      <description>HTTP method not in allowed list (OPTIONS, TRACE, etc.)</description>
+      <threshold count="2" interval="5" unit="minutes"/>
+      <responses>
+        <response action="log" />
+        <response action="block" duration="15" unit="minutes"/>
+      </responses>
+    </detection-point>
+
+    <!-- AE1 — High Rate of Login Attempts (brute force) -->
+    <detection-point id="AE1" category="Authentication">
+      <description>More than 5 failed logins in 5 minutes from same IP</description>
+      <threshold count="5" interval="5" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="block" duration="30" unit="minutes"/>
+        <response action="disable_user"/>
+      </responses>
+    </detection-point>
+
+    <!-- AE2 — Login Attempt with Known Bad Credential Format -->
+    <detection-point id="AE2" category="Authentication">
+      <description>Login username/password contains SQLi or XSS payload patterns</description>
+      <threshold count="1" interval="1" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="block" duration="60" unit="minutes"/>
+      </responses>
+    </detection-point>
+
+    <!-- SE1 — Invalid Session ID -->
+    <detection-point id="SE1" category="Session">
+      <description>Request with a session token that doesn't exist in the session store</description>
+      <threshold count="3" interval="5" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="invalidate_session"/>
+      </responses>
+    </detection-point>
+
+    <!-- SE3 — Modifying Existing Cookie to Try Privilege Escalation -->
+    <detection-point id="SE3" category="Session">
+      <description>Session cookie value has been tampered with (HMAC validation failure)</description>
+      <threshold count="1" interval="1" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="invalidate_session"/>
+        <response action="block" duration="60" unit="minutes"/>
+      </responses>
+    </detection-point>
+
+    <!-- IE1 — Cross-Site Scripting Attempt (Input) -->
+    <detection-point id="IE1" category="Input">
+      <description>Input field contains HTML/script tags after server-side sanitization</description>
+      <threshold count="2" interval="5" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="block" duration="15" unit="minutes"/>
+      </responses>
+    </detection-point>
+
+    <!-- IE2 — SQL Injection Attempt (Input) -->
+    <detection-point id="IE2" category="Input">
+      <description>Input contains SQL metacharacters matching injection patterns</description>
+      <threshold count="1" interval="1" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="block" duration="60" unit="minutes"/>
+        <response action="alert_security_team"/>
+      </responses>
+    </detection-point>
+
+    <!-- ACE1 — Forceful Browsing (Direct Object Reference) -->
+    <detection-point id="ACE1" category="Access Control">
+      <description>User accesses resource ID that doesn't belong to their account (IDOR attempt)</description>
+      <threshold count="3" interval="5" unit="minutes"/>
+      <responses>
+        <response action="log"/>
+        <response action="disable_user"/>
+      </responses>
+    </detection-point>
+
+  </detection-points>
+
+  <!-- ── Response Definitions ──────────────────────────────────────────── -->
+  <responses>
+    <response id="log" action="LOG"
+      description="Write detection event to security log"/>
+    <response id="block" action="BLOCK"
+      description="Return 403 and block IP for specified duration"/>
+    <response id="disable_user" action="DISABLE_USER"
+      description="Lock the user account pending manual review"/>
+    <response id="invalidate_session" action="INVALIDATE_SESSION"
+      description="Destroy the current session and force re-login"/>
+    <response id="alert_security_team" action="NOTIFY"
+      description="Send Slack/email alert to security team"/>
+  </responses>
+
+  <!-- ── Attack Threshold Escalation ──────────────────────────────────── -->
+  <!--
+    AppSensor uses a "trust score" per user/IP. As detection points fire,
+    the score drops. Escalation tiers:
+      Score > 80  : Normal user, log only
+      Score 60-80 : Warn + add CAPTCHA challenge
+      Score 40-60 : Block individual endpoint
+      Score 20-40 : Block all access for N minutes
+      Score < 20  : Disable account, alert SOC
+  -->
+
+</appsensor-config>

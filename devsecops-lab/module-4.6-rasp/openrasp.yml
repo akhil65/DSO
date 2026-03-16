@@ -1,0 +1,47 @@
+# OpenRASP Node.js Agent Configuration
+# Docs: https://rasp.baidu.com/doc/install/node/
+
+rasp:
+  # Block mode: block malicious requests (vs log-only in "log" mode)
+  block_status_code: 302
+  block_redirect_url: "/__openrasp/blocked"
+
+  # Log configuration
+  log:
+    level: WARNING
+    maxsize: 10485760   # 10 MB per log file
+    maxbackup: 5
+
+  # Plugin configuration
+  plugin:
+    timeout_millis: 100   # max time a plugin hook can add to a request (ms)
+    maxstack: 100
+
+  # Detection rules — enabled by default
+  hooks:
+    sql:
+      enabled: true
+      # Block if query contains SQL injection pattern
+      action: block
+
+    xxe:
+      enabled: true
+      action: block
+
+    path_traversal:
+      enabled: true
+      action: block
+
+    command_execution:
+      enabled: true
+      action: block
+
+    ssrf:
+      enabled: true
+      action: block
+
+  # Whitelist — bypass RASP for trusted internal calls
+  ignore_hooks: []
+
+  # Response body to send when attack is blocked
+  block_json: '{"status": 403, "message": "Request blocked by OpenRASP"}'

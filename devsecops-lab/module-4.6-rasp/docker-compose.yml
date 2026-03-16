@@ -1,0 +1,51 @@
+services:
+
+  # ─── Exercise 4.6.1 / 4.6.2 — Juice Shop + OpenRASP agent ────────────────
+  juice-shop-rasp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: juice-shop-openrasp:local
+    container_name: juice-shop-rasp
+    ports:
+      - "3002:3000"   # port 3000 = original Juice Shop; 3002 = RASP-protected copy
+    environment:
+      - NODE_ENV=production
+      - OPENRASP_CONFIG=/juice-shop/openrasp.yml
+    volumes:
+      - rasp-logs:/juice-shop/logs
+    restart: unless-stopped
+    profiles:
+      - openrasp
+
+  # ─── Exercise 4.6.3 — Contrast CE agent ───────────────────────────────────
+  # Requires free account at https://app.contrastsecurity.com/
+  # Set CONTRAST__API__URL, CONTRAST__API__USER_NAME, CONTRAST__API__API_KEY,
+  # CONTRAST__API__SERVICE_KEY in a .env file before running.
+  juice-shop-contrast:
+    image: bkimminich/juice-shop:latest
+    container_name: juice-shop-contrast
+    ports:
+      - "3003:3000"   # port 3003 = Contrast CE-protected copy
+    environment:
+      - NODE_ENV=production
+      # Contrast CE config — fill these in .env
+      - CONTRAST__API__URL=${CONTRAST__API__URL:-https://app.contrastsecurity.com/Contrast}
+      - CONTRAST__API__USER_NAME=${CONTRAST__API__USER_NAME}
+      - CONTRAST__API__API_KEY=${CONTRAST__API__API_KEY}
+      - CONTRAST__API__SERVICE_KEY=${CONTRAST__API__SERVICE_KEY}
+      - CONTRAST__APPLICATION__NAME=juice-shop-lab
+      - CONTRAST__APPLICATION__ENVIRONMENT=development
+      # Inject Contrast agent via NODE_OPTIONS — no code change needed
+      - NODE_OPTIONS=--require @contrast/agent
+    volumes:
+      - contrast-logs:/juice-shop/logs
+    command: >
+      sh -c "npm install --prefix /juice-shop @contrast/agent && node /juice-shop/app.js"
+    restart: unless-stopped
+    profiles:
+      - contrast
+
+volumes:
+  rasp-logs:
+  contrast-logs:
