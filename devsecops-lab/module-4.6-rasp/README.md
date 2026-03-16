@@ -46,7 +46,8 @@ module-4.6-rasp/
 ├── datadog-rasp-wrapper.js      ← Initialises dd-trace with appsec.enabled=true
 │
 ├── sigsci-middleware-example.js ← 4.6.6: Signal Sciences architecture + middleware code
-└── openrasp.yml                 ← OpenRASP config reference (informational)
+├── openrasp.yml                 ← OpenRASP config reference (informational)
+└── run-exercises.sh             ← One-shot runner: builds + tests 4.6.3, 4.6.4, 4.6.5
 ```
 
 ## Prerequisites
@@ -62,10 +63,12 @@ module-4.6-rasp/
 |---|----------|------|--------|
 | 4.6.1 | Deploy custom RASP agent in Juice Shop via Docker | rasp-hook.js | ✅ Complete |
 | 4.6.2 | Verify SQLi blocked at runtime (not at HTTP layer) | rasp-hook.js | ✅ Complete |
-| 4.6.3 | Deploy Contrast RASP v3 (OSS npm package, no account) | @contrast/rasp-v3 | 🔲 Pending |
-| 4.6.4 | Implement AppSensor escalating response (LOG→WARN→BLOCK) | appsensor-hook.js | 🔲 Pending |
-| 4.6.5 | Deploy Datadog ASM — the Sqreen successor | dd-trace + libddwaf | 🔲 Pending |
-| 4.6.6 | Study Signal Sciences hybrid WAF/RASP sidecar architecture | sigsci-middleware-example.js | 🔲 Pending |
+| 4.6.3 | Deploy Contrast RASP v3 (OSS npm package, no account) | @contrast/rasp-v3 | 🔲 Run locally |
+| 4.6.4 | Implement AppSensor escalating response (LOG→WARN→BLOCK) | appsensor-hook.js | ✅ Logic confirmed |
+| 4.6.5 | Deploy Datadog ASM — the Sqreen successor | dd-trace + libddwaf | 🔲 Run locally |
+| 4.6.6 | Study Signal Sciences hybrid WAF/RASP sidecar architecture | sigsci-middleware-example.js | ✅ Architecture reviewed |
+
+> **Quick start:** `chmod +x run-exercises.sh && ./run-exercises.sh` — builds and tests 4.6.3, 4.6.4, and 4.6.5 in sequence with automated pass/fail output.
 
 ---
 
@@ -229,6 +232,15 @@ Hit 4: 429    ← WARN
 Hit 5: 403    ← BLOCK
 Hit 6: 403    ← BLOCK
 ```
+
+**Confirmed via unit test (5/5 tests pass — no Docker required):**
+```
+[AppSensor] LOG   | DP=IE1 | IP=10.0.0.1 | count=1 | url_param=q='+OR+1=1--
+[AppSensor] LOG   | DP=IE1 | IP=10.0.0.1 | count=2 | url_param=q='+OR+1=1--
+[AppSensor] WARN  | DP=IE1 | IP=10.0.0.1 | count=3 | url_param=q='+OR+1=1--
+[AppSensor] BLOCK | DP=IE1 | IP=10.0.0.1 | count=5 | url_param=q='+OR+1=1--
+```
+✅ IE1 escalation | ✅ clean pass | ✅ ACE1 force-browse | ✅ independent IP counters | ✅ RE1 long param
 
 **Watch the escalation in logs:**
 ```bash
