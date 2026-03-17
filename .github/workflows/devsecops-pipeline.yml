@@ -262,13 +262,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Checkov
-        run: |
-          pip install checkov
-          checkov --directory devsecops-lab \
-                  --framework dockerfile,docker_compose \
-                  --output sarif \
-                  --soft-fail > checkov-results.sarif || true
-          echo "SARIF lines: $(wc -l < checkov-results.sarif)"
+        uses: bridgecrewio/checkov-action@master
+        continue-on-error: true
+        with:
+          directory: devsecops-lab
+          framework: dockerfile,docker_compose
+          output_format: sarif
+          output_file_path: console,checkov-results.sarif
 
       - name: Upload Checkov results to Security tab
         uses: github/codeql-action/upload-sarif@v4
