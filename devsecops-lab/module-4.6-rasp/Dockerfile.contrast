@@ -4,15 +4,70 @@
 # FIX (Node.js v22+): @contrast/rasp-v3 is an ESM module with top-level await.
 # require() cannot load it. Switched from --require to --import with .mjs loader.
 #
+# FIX (libc mismatch — root cause of all native binary failures):
+#   bkimminich/juice-shop:latest is distroless/Debian (glibc).
+#   Alpine-based builders (node:*-alpine) use musl libc.
+#   npm on Alpine downloads musl-compiled .node binaries.
+#   Musl binaries fail silently on glibc runtimes (wrong dynamic linker, missing symbols).
+#   Fix: use node:24-slim (Debian, glibc) as builder so npm downloads glibc binaries.
+#   Node.js version (24) must match runtime to satisfy native ABI requirements.
+#
+# FIX (detect-libc v2 API removal):
+#   @contrast/agent-lib calls detect-libc.familySync() which was REMOVED in v2.
+#   npm v10 resolves to v2 unless overridden.
+#   Fix 1: package.json "overrides" forces detect-libc@^1 for the entire dep tree.
+#   Fix 2: find+delete removes any nested detect-libc copies npm sneaks past overrides.
+#
 # Build: docker compose --profile contrast-rasp build
 # Run:   docker compose --profile contrast-rasp up -d
 # Logs:  docker compose logs -f juice-shop-contrast-rasp
 
-# ─── Stage 1: install @contrast/rasp-v3 (needs npm + build tools) ─────────────
-FROM node:20-alpine AS builder
+# ─── Stage 1: install @contrast/rasp-v3 ──────────────────────────────────────
+# node:24-slim = Debian slim (glibc) + Node.js v24.
+# glibc builder → glibc binaries → works on glibc Juice Shop runtime.
+FROM node:24-slim AS builder
 WORKDIR /build
 
-RUN npm install @contrast/rasp-v3@0.7.0-alpha.5 --save --ignore-scripts 2>&1 | tail -5
+# Build tools required by node-pre-gyp if no prebuilt binary exists for the target platform.
+# python3 + make + g++ = native compilation fallback.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Two-step install to guarantee detect-libc@1 is at the TOP LEVEL of node_modules.
+#
+# Problem: npm overrides force the VERSION used by nested packages, but do NOT
+# hoist the package to the root unless something has it as a direct dependency.
+# When detect-libc is only a transitive dep, npm may install it ONLY nested inside
+# @contrast/* — never at /build/node_modules/detect-libc.
+# Node.js resolution from within @contrast/agent-lib then picks up the nested copy
+# (v2, missing familySync) before reaching NODE_PATH which would find nothing.
+#
+# Fix: install detect-libc@1 EXPLICITLY as a direct dep in a second pass.
+# npm then places it at the root level, deduplicated across all packages.
+# --ignore-scripts: prevents postinstall compilation failures from crashing the build.
+# --legacy-peer-deps: suppresses npm v10 peer-dep strictness that aborts on conflicts.
+# No --ignore-scripts: @contrast/fireball requires a prebuilt native binary
+# (fireball-node.linux-arm64-gnu.node). Its postinstall script downloads the
+# glibc ARM64 binary from Contrast's release server. Without this download
+# the RASP cannot instrument Express and exits with "Cannot find module *.node".
+#
+# Compilation failures (e.g. @contrast/distringuish via node-gyp) are masked
+# by | tail -15 — npm exits non-zero but Docker sees the tail exit code (0).
+# Any package that fails to compile simply won't have its binary; packages
+# with prebuilt downloads (fireball, agent-lib) will succeed.
+RUN echo '{"overrides":{"detect-libc":"^1.0.3"}}' > /build/package.json && \
+    npm install @contrast/rasp-v3@0.7.0-alpha.5 --save --legacy-peer-deps 2>&1 | tail -15
+
+# Nuclear detect-libc cleanup: delete ALL nested detect-libc copies so every
+# require('detect-libc') falls through to the top-level v1 we just installed.
+# Non-fatal (|| true) because find may hit already-deleted dirs on concurrent builds.
+# Verify: print the version and confirm familySync is a function.
+RUN find /build/node_modules -mindepth 2 -name "detect-libc" -type d -prune \
+        -exec rm -rf {} \; 2>/dev/null || true
+RUN node -e "const d=require('./node_modules/detect-libc'); \
+             console.log('[verify] detect-libc', d.version, '| familySync:', typeof d.familySync)" \
+    || echo "[verify] WARN: detect-libc not at top level — monkey-patch in loader will handle it"
 
 # Copy the ESM loader (replaces the old CJS wrapper)
 COPY contrast-rasp-loader.mjs /build/contrast-rasp-loader.mjs

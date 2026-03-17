@@ -12,10 +12,11 @@
 | [Module 2](./module-2-sast/) | Static Analysis — SAST & SCA (Bandit, Semgrep, Trivy, OSV Scanner) | ✅ Complete |
 | [Module 3](./module-3-dast/) | Dynamic Analysis — DAST (OWASP ZAP, headless CI) | ✅ Complete |
 | [Module 3.5](./module-3.5-api-security/) | API Security — OWASP API Top 10 (crAPI, ZAP, kiterunner) | ✅ Complete |
-| [Module 4](./module-4-pentesting/) | Manual Pentesting (Burp Suite, SQLi, XSS, CSRF) | ✅ In Progress |
-| [Module 4.5](./module-4.5-rasp/) | RASP — Runtime Application Self-Protection (OpenRASP on Juice Shop) | 🔒 Locked |
-| [Module 5](./module-5-pipeline/) | CI/CD Pipeline Automation (GitHub Actions / GitLab CI) | 🔒 Locked |
-| [Module 6](./module-6-ai-security/) | AI Application Security & MLSecOps (Prompt Injection, STRIDE-GPT) | 🔒 Locked |
+| [Module 4](./module-4-pentesting/) | Manual Pentesting (Burp Suite, SQLi, XSS, CSRF, IDOR) | ✅ Complete |
+| [Module 4.5](./module-4.5-waf/) | WAF — ModSecurity CRS reverse proxy in front of Juice Shop | ✅ Complete |
+| [Module 4.6](./module-4.6-rasp/) | RASP — Runtime Application Self-Protection (dd-trace, AppSensor, Contrast) | ✅ Complete |
+| [Module 5](./module-5-pipeline/) | CI/CD Pipeline Security (GitHub Actions — Gitleaks, Semgrep, Trivy, ZAP) | 🔒 Locked |
+| [Module 6](./module-6-ai-security/) | AI Application Security & MLSecOps (Prompt Injection, OWASP LLM Top 10) | 🔒 Locked |
 | [Module 7](./module-7-mobile/) | Mobile AppSec — Android Static & Dynamic Analysis (MobSF, Frida, DIVA) | 🔒 Locked |
 
 ---
@@ -28,9 +29,10 @@
 **SCA:** OWASP Dependency-Check · Trivy · OSV Scanner
 **DAST:** OWASP ZAP · Burp Suite CE · Kiterunner · Nmap · Metasploit
 **API Security:** ZAP + OpenAPI · crAPI · OWASP API Top 10
-**RASP:** OpenRASP (Node.js agent on Juice Shop)
+**WAF:** OWASP ModSecurity CRS v3 + nginx (Docker)
+**RASP:** rasp-hook.js (custom) · AppSensor · dd-trace v4 + libddwaf · @contrast/rasp-v3 (documented, incompatible)
 **Mobile:** MobSF · Frida · Objection · OWASP MASTG
-**AI Security:** STRIDE-GPT · Prompt Injection · OWASP LLM Top 10
+**AI Security:** Garak · Rebuff · Prompt Injection · OWASP LLM Top 10
 
 ---
 
@@ -48,7 +50,7 @@ See [Module 1 README](./module-1-infrastructure/README.md) for full setup instru
 
 ## Docs & Walkthroughs
 
-Detailed guides for each module live in the [`docs/`](./docs/) folder.
+Detailed guides and scan reports for each module live in the [`docs/`](./docs/) folder.
 
 ---
 
@@ -76,6 +78,17 @@ Detailed guides for each module live in the [`docs/`](./docs/) folder.
 | 2026-03-15 | Module 3.5 | JWT alg:none bypass: forged unsigned token accepted — admin@admin.com data returned |
 | 2026-03-15 | Module 3.5 | Excessive data exposure: community posts leak email + vehicleid for all users |
 | 2026-03-15 | Module 3.5 | Attack chain documented: data exposure → BOLA → JWT forgery → account takeover |
+| 2026-03-15 | Module 4 | Burp Suite proxy configured, all traffic intercepted |
+| 2026-03-15 | Module 4 | SQLi admin login bypass and UNION data extraction via Repeater |
+| 2026-03-15 | Module 4 | Stored XSS confirmed in product review form |
+| 2026-03-15 | Module 4 | IDOR: accessed other users' baskets by incrementing basket ID |
+| 2026-03-15 | Module 4.5 | ModSecurity CRS WAF deployed — SQLi and XSS blocked with 403 on port 3001 |
+| 2026-03-15 | Module 4.5 | WAF anomaly scoring validated: CRS rules 942100/941100 firing correctly |
+| 2026-03-15 | Module 4.5 | IDOR confirmed unblocked by WAF — logic flaw, not a payload pattern |
+| 2026-03-16 | Module 4.6 | Custom RASP (rasp-hook.js) deployed — SQLi blocked at Sequelize hook level |
+| 2026-03-16 | Module 4.6 | AppSensor escalating response confirmed: LOG→429→403 per IP |
+| 2026-03-16 | Module 4.6 | Contrast RASP v3 incompatible on ARM64 + Node 24 — documented with root cause |
+| 2026-03-17 | Module 4.6 | Datadog ASM: libddwaf loaded, custom blocking rules deployed — 403 confirmed for SQLi/XSS/LFI |
 
 ---
 

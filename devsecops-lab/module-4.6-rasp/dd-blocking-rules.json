@@ -1,0 +1,86 @@
+{
+  "version": "2.1",
+  "metadata": {
+    "rules_version": "1.0.0-lab"
+  },
+  "actions": [
+    {
+      "id": "block",
+      "type": "block_request",
+      "parameters": {
+        "status_code": 403,
+        "type": "auto"
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "sqli-libinjection",
+      "name": "SQL Injection via libinjection",
+      "tags": {
+        "category": "attack_attempt",
+        "type": "sql_injection",
+        "cwe": "89"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              { "address": "server.request.query" },
+              { "address": "server.request.body" },
+              { "address": "server.request.path_params" },
+              { "address": "server.request.cookies" }
+            ]
+          },
+          "operator": "is_sqli"
+        }
+      ],
+      "on_match": ["block"]
+    },
+    {
+      "id": "xss-libinjection",
+      "name": "XSS via libinjection",
+      "tags": {
+        "category": "attack_attempt",
+        "type": "xss",
+        "cwe": "79"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              { "address": "server.request.query" },
+              { "address": "server.request.body" },
+              { "address": "server.request.path_params" }
+            ]
+          },
+          "operator": "is_xss"
+        }
+      ],
+      "on_match": ["block"]
+    },
+    {
+      "id": "lfi-path-traversal",
+      "name": "Path Traversal (LFI)",
+      "tags": {
+        "category": "attack_attempt",
+        "type": "lfi",
+        "cwe": "22"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              { "address": "server.request.query" },
+              { "address": "server.request.body" },
+              { "address": "server.request.path_params" }
+            ],
+            "list": ["../", "..\\", "%2e%2e%2f", "%2e%2e/", "..%2f", "%2e%2e%5c"]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "on_match": ["block"]
+    }
+  ]
+}

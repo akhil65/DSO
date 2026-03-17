@@ -23,12 +23,37 @@
  * Loaded via NODE_OPTIONS="--require /juice-shop/datadog-rasp-wrapper.js"
  */
 
-const path = require('path');
-
-// dd-trace installed to dd_modules (separate from Juice Shop's node_modules)
 const DD_PATH = '/juice-shop/dd_modules/dd-trace';
 
+// ── detect-libc v2 compatibility shim ────────────────────────────────────────
+// node-gyp-build (used by @datadog/native-appsec to load libddwaf) calls
+// detect-libc.familySync() to build the prebuilt binary path, e.g.
+// "linuxglibc-arm64".  detect-libc v2 removed familySync() (sync API).
+// Without the shim: familySync = undefined → path = "linuxundefined-arm64"
+//   → fs.existsSync(undefined) → DEP0187 warning → binary not found
+//   → wafVersion absent from startup log → no blocking.
+// The prebuilt binary EXISTS at linuxglibc-arm64/node-napi.node; we just need
+// familySync() to return 'glibc' so node-gyp-build constructs the right path.
+const Module = require('module');
+const _originalLoad = Module._load;
+Module._load = function patchedLoad(request, parent, isMain) {
+  const mod = _originalLoad.call(this, request, parent, isMain);
+  if (request === 'detect-libc' && mod && typeof mod.familySync !== 'function') {
+    mod.familySync        = () => 'glibc';
+    mod.versionSync       = () => null;
+    mod.isNonGlibcLinux   = () => false;
+    console.log('[Datadog ASM] detect-libc patched: familySync() shim installed');
+  }
+  return mod;
+};
+
 console.log('[Datadog ASM] Loading dd-trace from', DD_PATH);
+
+// Log version for diagnosing whether blocking works in this release.
+try {
+  const pkg = require(DD_PATH + '/package.json');
+  console.log('[Datadog ASM] dd-trace version:', pkg.version);
+} catch (_) {}
 
 try {
   const ddTrace = require(DD_PATH);
@@ -46,7 +71,9 @@ try {
     version:     '1.0.0',
 
     // ── APM / tracing ────────────────────────────────────────────────────────
-    // These are no-ops when DD_API_KEY is not set; blocking still works locally.
+    // DD_TRACE_ENABLED=false disables APM span collection but keeps AppSec active.
+    // This prevents dd-trace from trying (and timing out connecting) to an agent,
+    // which in some versions delays or degrades AppSec blocking decisions.
     hostname:    process.env.DD_AGENT_HOST || 'localhost',
     port:        parseInt(process.env.DD_TRACE_AGENT_PORT || '8126', 10),
 
@@ -55,14 +82,18 @@ try {
     logInjection:   false,
     profiling:      false,
 
-    // Suppress "failed to connect to agent" stderr spam when running without DD_API_KEY
-    startupLogs: false,
+    // startupLogs: dd-trace prints a summary of its configuration at startup,
+    // including whether libddwaf loaded successfully and WAF rules version.
+    // Essential for diagnosing "AppSec enabled but not blocking" issues.
+    // Example output:
+    //   DATADOG TRACER CONFIGURATION - { ... "appsec":{"enabled":true} ... }
+    //   DATADOG TRACER DIAGNOSTIC - Agent Error: connect ECONNREFUSED (expected, no agent)
+    //   If libddwaf failed: AppSec would show wafVersion: null or similar
+    startupLogs: true,
   });
 
   console.log('[Datadog ASM] dd-trace initialized — AppSec blocking: ENABLED');
-  console.log('[Datadog ASM] libddwaf rules: bundled (no cloud connection required for blocking)');
-  console.log('[Datadog ASM] Dashboard: requires DD_API_KEY + free Datadog trial account');
-  console.log('[Datadog ASM] Sign up: https://app.datadoghq.com/signup (14-day free trial)');
+  console.log('[Datadog ASM] Check startup logs above for libddwaf load status.');
 
 } catch (err) {
   console.error('[Datadog ASM] Failed to initialize dd-trace:', err.message);

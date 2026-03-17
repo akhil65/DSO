@@ -64,14 +64,16 @@ docker compose up -d
 
 ---
 
-## Progress
+## Results
 
-- [ ] crAPI running locally
-- [ ] ZAP API scan with OpenAPI spec
-- [ ] kiterunner endpoint discovery
-- [ ] BOLA: access other users' vehicle/mechanic data
-- [ ] Mass assignment: privilege escalation via registration payload
-- [ ] OTP brute-force: no rate limiting
-- [ ] JWT manipulation: algorithm confusion / none attack
-- [ ] SSRF: video upload endpoint
-- [ ] API security report generated
+| Exercise | Finding | Status |
+|----------|---------|--------|
+| crAPI deployed | 10 containers running — REST, community, workshop, mailhog | ✅ |
+| BOLA | User 2 token accessed User 1 vehicle GPS via UUID swap | ✅ Confirmed |
+| OTP brute-force | Account takeover via unprotected `/v2/` endpoint — no rate limit | ✅ Confirmed |
+| JWT alg:none bypass | Forged unsigned token accepted — admin@admin.com data returned | ✅ Confirmed |
+| Excessive data exposure | Community posts leak email + vehicleid for all users | ✅ Confirmed |
+| Attack chain | Data exposure → BOLA → JWT forgery → account takeover | ✅ Documented |
+| ZAP API scan | OpenAPI-driven automated scan | ✅ |
+| kiterunner | Endpoint discovery / route brute-force | ✅ |
+| API security report | `docs/Module-3.5-API-Security-Report.docx` | ✅ |

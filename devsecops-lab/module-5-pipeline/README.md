@@ -177,4 +177,4 @@ In GitHub: **Settings → Branches → Add rule → main**
 
 ## Reports
 
-See `docs/Module-5-Pipeline-Report.docx` (generated at module completion)
+Report generated at module completion — `docs/Module-5-Pipeline-Report.docx`

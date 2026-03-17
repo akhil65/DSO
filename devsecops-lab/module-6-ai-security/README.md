@@ -170,4 +170,4 @@ def safe_chat(user_input):
 
 ## Reports
 
-See `docs/Module-6-AI-Security-Report.docx` (generated at module completion)
+Report generated at module completion — `docs/Module-6-AI-Security-Report.docx`

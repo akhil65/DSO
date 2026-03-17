@@ -25,12 +25,37 @@
 #   View: https://app.datadoghq.com/security/appsec
 
 # ─── Stage 1: install dd-trace (needs npm; distroless Juice Shop has no npm) ──
-FROM node:20-alpine AS builder
+#
+# CRITICAL: use node:24-slim (Debian/glibc), NOT node:*-alpine (musl).
+# Juice Shop's base image is distroless/Debian (glibc libc).
+# Alpine uses musl libc. npm on Alpine downloads musl-compiled libddwaf binaries.
+# Musl binaries fail to load on glibc runtimes — dd-trace initialises (pure JS)
+# but libddwaf silently fails to load, leaving AppSec with NO WAF engine.
+# Result: dd-trace logs "AppSec blocking: ENABLED" but all requests pass through.
+#
+# node:24-slim → npm downloads glibc libddwaf binary for linux-arm64/x64 + Node 24.
+# That binary loads correctly on the glibc Juice Shop container → 403 blocking works.
+FROM node:24-slim AS builder
 WORKDIR /build
 
-# Install dd-trace latest stable.  The package bundles prebuilt libddwaf
-# binaries for linux-x64 and linux-arm64 — no native compilation needed.
-RUN npm install dd-trace --save 2>&1 | tail -5
+# Pin dd-trace to v4.x (NOT v5).
+#
+# dd-trace v5 changed WAF rule delivery: rules now come from REMOTE CONFIGURATION
+# pushed by a running Datadog agent. Without an agent, v5 has no WAF rules →
+# AppSec is "enabled" but has nothing to match against → all requests pass through.
+# The startup log in v5 shows `appsec_enabled:true` but no `wafVersion` because
+# the rules were never loaded from the (unreachable) agent.
+#
+# dd-trace v4 BUNDLES OWASP CRS rules with the package (libddwaf + rules.json).
+# Blocking decisions are made locally without any agent connection.
+# Result: requests matching SQLi, XSS, LFI, SSRF rules get 403 in-process.
+# detect-libc is an optional peer of node-gyp-build (not auto-installed).
+# node-gyp-build calls detect-libc.familySync() to build the prebuilt binary
+# path: "linux" + libc + "-" + arch → "linuxglibc-arm64".
+# Without detect-libc installed, node-gyp-build falls back to "linux-arm64",
+# that directory does not exist → libddwaf binary never loads → no blocking.
+# detect-libc@1 ships familySync() (sync API); v2 removed it.
+RUN npm install dd-trace@4 detect-libc@1 --save 2>&1 | tail -5
 
 COPY datadog-rasp-wrapper.js /build/datadog-rasp-wrapper.js
 
@@ -42,6 +67,14 @@ COPY --from=builder --chmod=755 /build/node_modules /juice-shop/dd_modules
 
 # Copy the thin wrapper that initializes dd-trace with AppSec enabled.
 COPY --from=builder --chmod=644 /build/datadog-rasp-wrapper.js /juice-shop/datadog-rasp-wrapper.js
+
+# Custom rules file with blocking enabled.
+# dd-trace v4 ships default rules in MONITORING mode (detect, don't block).
+# Blocking requires either a connected Datadog agent (remote config) or a
+# local rules file with "on_match": ["block"] on each rule.
+# DD_APPSEC_RULES overrides the bundled recommended.json entirely.
+COPY --chmod=644 dd-blocking-rules.json /juice-shop/dd-blocking-rules.json
+ENV DD_APPSEC_RULES="/juice-shop/dd-blocking-rules.json"
 
 ENV NODE_OPTIONS="--require /juice-shop/datadog-rasp-wrapper.js"
 
@@ -59,5 +92,11 @@ ENV DD_ENV="lab"
 ENV DD_SERVICE="juice-shop"
 ENV DD_VERSION="1.0.0"
 ENV DD_APPSEC_ENABLED="true"
+
+# Force startup log output. In dd-trace v4, `startupLogs: true` in init() code
+# config is silently ignored — the env var is required.
+# The startup log prints a DATADOG TRACER CONFIGURATION JSON that includes
+# `wafVersion` when libddwaf loaded successfully, confirming AppSec is armed.
+ENV DD_TRACE_STARTUP_LOGS="true"
 
 EXPOSE 3000
