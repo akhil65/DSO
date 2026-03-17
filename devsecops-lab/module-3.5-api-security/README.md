@@ -20,10 +20,12 @@
 | Tool | Role | Install |
 |------|------|---------|
 | **crAPI** | Vulnerable target — REST + GraphQL API | `docker compose up` |
-| **OWASP ZAP** | Automated API scan with OpenAPI spec | Already installed |
-| **kiterunner** | API route discovery / endpoint enumeration | `brew install kiterunner` |
+| **OWASP ZAP (GUI)** | Spider/crawl scan — Phase 1 manual testing | Already installed |
+| **OWASP ZAP (API scan)** | OpenAPI spec-driven automated scan — Phase 2 | Docker: `ghcr.io/zaproxy/zaproxy:stable` |
+| **kiterunner** | API route discovery / endpoint enumeration | Build from source: `go build ./cmd/kiterunner/` |
 | **Burp Suite CE** | Manual request manipulation, BOLA testing | Already installed |
-| **jwt_tool** | JWT decode, algorithm confusion, none-attack | `pip install jwt_tool` |
+| **jwt_tool** | JWT decode, algorithm confusion, none-attack | Clone: `github.com/ticarpi/jwt_tool` |
+| **vAPI** | Additional vulnerable API target (bonus) | `git clone github.com/roottusk/vapi` |
 
 ---
 
@@ -66,14 +68,40 @@ docker compose up -d
 
 ## Results
 
+### Phase 1 — Manual Testing (crAPI, curl + ZAP GUI)
+
 | Exercise | Finding | Status |
 |----------|---------|--------|
-| crAPI deployed | 10 containers running — REST, community, workshop, mailhog | ✅ |
+| crAPI deployed | 10 containers running — REST, community, workshop, mailhog | ✅ Confirmed |
 | BOLA | User 2 token accessed User 1 vehicle GPS via UUID swap | ✅ Confirmed |
 | OTP brute-force | Account takeover via unprotected `/v2/` endpoint — no rate limit | ✅ Confirmed |
-| JWT alg:none bypass | Forged unsigned token accepted — admin@admin.com data returned | ✅ Confirmed |
+| JWT alg:none bypass | Forged unsigned token accepted — user profile data returned | ✅ Confirmed |
 | Excessive data exposure | Community posts leak email + vehicleid for all users | ✅ Confirmed |
-| Attack chain | Data exposure → BOLA → JWT forgery → account takeover | ✅ Documented |
-| ZAP API scan | OpenAPI-driven automated scan | ✅ |
-| kiterunner | Endpoint discovery / route brute-force | ✅ |
-| API security report | `docs/Module-3.5-API-Security-Report.docx` | ✅ |
+| Attack chain | Data exposure → BOLA → JWT forgery → account takeover | ✅ Confirmed |
+| ZAP GUI spider scan | Crawl-based scan against crAPI REST surface | ✅ Confirmed |
+
+### Phase 2 — Tool Revisit (2026-03-17)
+
+| Tool | Exercise | Finding | Status |
+|------|----------|---------|--------|
+| jwt_tool | RS256 token decode | Token uses RS256; claims: `sub`, `iat`, `exp`, `role:user` | ✅ Confirmed |
+| jwt_tool | alg:none attack | **CRITICAL** — unsigned forged token accepted, HTTP 200 + full user profile returned | ✅ Confirmed |
+| kiterunner | Endpoint discovery — crAPI root | 0 endpoints discovered (wordlist: 7,615 routes) | ✅ Run — 0 hits |
+| kiterunner | Endpoint discovery — `/identity` | 0 endpoints discovered (91,380 probes) | ✅ Run — 0 hits |
+| kiterunner | Endpoint discovery — `/community` | 0 endpoints discovered (91,380 probes) | ✅ Run — 0 hits |
+| ZAP API scan | OpenAPI spec-driven scan | Blocked — crAPI does not expose spec via HTTP (all common endpoints return 404/401) | ⚠️ Not completed |
+| vAPI | Additional vulnerable target | Started on port 8000; upstream migration bug (PHP 7.4/MySQL 8 incompatibility in flags seeder) — excluded from testing | ⚠️ Setup failed |
+
+### Key Phase 2 Finding: kiterunner 0-hit Analysis
+
+kiterunner found 0 endpoints across all three scans. **This does not mean crAPI has no vulnerabilities** — Phase 1 and jwt_tool confirmed multiple critical issues. It means:
+
+- crAPI's paths (`/identity/api/v2/user/dashboard`, `/community/api/v2/community/posts/{id}`) do not match generic wordlist patterns
+- Wordlist-based endpoint discovery fails against non-standard path hierarchies
+- Real vulnerabilities (alg:none, BOLA, OTP brute-force) require logic testing, not path enumeration
+- Non-standard paths are security through obscurity — not a genuine defence
+
+### Reports
+
+- Phase 1 report: `docs/Module-3.5-API-Security-Report.docx` — manual curl findings
+- Phase 2 findings: captured in this README and lab walkthrough
