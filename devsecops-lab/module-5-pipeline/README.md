@@ -1,179 +1,178 @@
 # Module 5 — CI/CD Pipeline Security (GitHub Actions)
 
-## Overview
+> Embed security gates directly into the CI/CD pipeline. Every push and PR automatically triggers secrets detection, SAST, SCA, IaC scanning, and Dockerfile linting — shifting security left so vulnerabilities are caught before they reach production.
 
-Secure the software supply chain by embedding security gates directly into the GitHub Actions CI/CD pipeline. Every pull request and push automatically triggers SAST, dependency scanning, container image scanning, and secrets detection — shifting security left so vulnerabilities are caught before they reach production.
+---
 
-**Platform:** GitHub Actions (free tier)
-**Target repo:** `devsecops-lab` (your fork)
+## Objectives
 
-## Architecture
+- Understand the role of each security gate in a real CI/CD pipeline
+- Add Gitleaks to detect secrets committed to git history
+- Enable CodeQL for GitHub-native SAST across JavaScript and Python
+- Configure SonarCloud for continuous code quality and vulnerability gates
+- Add Checkov to scan Dockerfiles and docker-compose for misconfigurations
+- Add Hadolint to enforce Dockerfile best practices
+- Trigger a ZAP DAST baseline scan against Juice Shop on-demand
+
+---
+
+## Tools
+
+| Tool | Category | Role | Free? |
+|------|----------|------|-------|
+| **Gitleaks** | Secrets | Scans full git history for API keys, tokens, passwords | ✅ Open source |
+| **Semgrep** | SAST | Multi-language static analysis — OWASP Top 10 rules | ✅ Open source |
+| **CodeQL** | SAST | GitHub-native deep analysis — JS and Python | ✅ Free for public repos |
+| **SonarCloud** | SAST + Quality | Continuous code inspection + quality gate | ✅ Free for public repos |
+| **Trivy** | SCA | Dependency and container CVE scan | ✅ Open source |
+| **OSV Scanner** | SCA | Google vulnerability DB — broader PYSEC coverage | ✅ Open source |
+| **Checkov** | IaC | Dockerfile + docker-compose misconfiguration scan | ✅ Open source |
+| **Hadolint** | Lint | Dockerfile best-practice linter (CIS Docker Benchmark) | ✅ Open source |
+| **OWASP ZAP** | DAST | Passive baseline scan against Juice Shop (manual trigger) | ✅ Open source |
+
+---
+
+## Pipeline Architecture
 
 ```
 Developer push / PR
         │
         ▼
-┌─────────────────────────────────┐
-│        GitHub Actions CI        │
-│                                 │
-│  ① Secrets scan  (Gitleaks)    │
-│  ② SAST         (Semgrep)      │
-│  ③ Dependency   (Trivy SCA)    │
-│  ④ Container    (Trivy image)  │
-│  ⑤ DAST smoke   (ZAP baseline) │
-└─────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│          GitHub Actions CI/CD            │
+│                                          │
+│  ① Secrets scan    (Gitleaks)           │
+│  ② SAST            (Semgrep)            │
+│  ③ SAST            (CodeQL — JS/Python) │
+│  ④ SAST + Quality  (SonarCloud)         │
+│  ⑤ SCA             (Trivy)              │
+│  ⑥ SCA             (OSV Scanner)        │
+│  ⑦ IaC scan        (Checkov)            │
+│  ⑧ Dockerfile lint (Hadolint)           │
+│  ⑨ DAST            (ZAP — manual only)  │
+└──────────────────────────────────────────┘
         │
-        ▼ Fail-fast on HIGH+CRITICAL
-   PR blocked / merge allowed
+        ▼
+ Results → GitHub Security tab (SARIF)
+ Results → SonarCloud dashboard
+ Artifacts → GitHub Actions summary
 ```
 
-## Prerequisites
+---
 
-- Modules 1–4 complete
-- GitHub repo with Actions enabled
-- Docker Hub or GHCR account (for container image push step)
+## Workflow File
 
-## Tools Used
+`.github/workflows/devsecops-pipeline.yml` — at the repo root.
 
-| Tool | Purpose | Free? |
-|------|---------|-------|
-| Gitleaks | Secrets detection in git history and staged files | ✅ Open source |
-| Semgrep (OSS) | SAST — same rules as Module 2 | ✅ Open source |
-| Trivy | SCA (dependencies) + container image scanning | ✅ Open source |
-| OWASP ZAP baseline | DAST passive scan in pipeline | ✅ Open source |
-| GitHub Actions | CI/CD orchestration | ✅ Free tier |
+Triggers:
+- **push** to `main` or `develop`
+- **pull_request** to `main`
+- **schedule** — every Monday at 01:30 UTC
+- **workflow_dispatch** — manual trigger (also activates ZAP DAST)
+
+---
 
 ## Exercises
 
 | # | Exercise | Tool | Status |
 |---|----------|------|--------|
-| 5.1 | Add Gitleaks secrets-scan job to CI workflow | Gitleaks | 🔲 Pending |
-| 5.2 | Add Semgrep SAST job — fail on HIGH+ findings | Semgrep | 🔲 Pending |
-| 5.3 | Add Trivy SCA job — scan package.json dependencies | Trivy | 🔲 Pending |
-| 5.4 | Add Trivy container image scan after docker build | Trivy | 🔲 Pending |
-| 5.5 | Add ZAP baseline DAST job against staging | ZAP | 🔲 Pending |
-| 5.6 | Gate merge on all security jobs passing | Actions branch protection | 🔲 Pending |
+| 5.1 | Add Gitleaks secrets scan — full history (`fetch-depth: 0`) | Gitleaks | ✅ Complete |
+| 5.2 | Enable CodeQL for JavaScript and Python (matrix strategy) | CodeQL | ✅ Complete |
+| 5.3 | Configure SonarCloud with org + project key, SONAR_TOKEN | SonarCloud | ✅ Complete |
+| 5.4 | Add Checkov IaC scan — Dockerfile + docker-compose | Checkov | ✅ Complete |
+| 5.5 | Add Hadolint Dockerfile linter | Hadolint | ✅ Complete |
+| 5.6 | Add ZAP DAST job gated to workflow_dispatch only | ZAP | ✅ Complete |
 
-## Exercise 5.1 — Gitleaks Secrets Scan
+---
 
-Create `.github/workflows/security.yml`:
+## Exercise Notes
 
-```yaml
-name: Security Pipeline
+### 5.1 — Gitleaks
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main]
-
-jobs:
-  secrets-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history for Gitleaks
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-## Exercise 5.2 — Semgrep SAST
+`fetch-depth: 0` is the critical setting. Without it, GitHub Actions only checks out a shallow clone of the latest commit. Gitleaks needs the full history to catch secrets that were committed and later "deleted" — they remain in git history forever.
 
 ```yaml
-  sast:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Semgrep SAST
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/javascript
-            p/nodejs
-            p/owasp-top-ten
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- uses: gitleaks/gitleaks-action@v2
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-> **Note:** Create a free account at semgrep.dev to get an app token. The OSS rules run without a token but won't upload results to the dashboard.
+### 5.2 — CodeQL
 
-## Exercise 5.3 — Trivy SCA (Dependencies)
+Uses a matrix strategy to run two parallel jobs (JS + Python) from a single job definition. Results appear in GitHub Security → Code scanning alerts.
 
 ```yaml
-  dependency-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Trivy SCA — package.json
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
-          severity: HIGH,CRITICAL
-          exit-code: 1
+strategy:
+  matrix:
+    language: [javascript, python]
 ```
 
-## Exercise 5.4 — Trivy Container Image Scan
+No token required — CodeQL is free for public repositories and uses `GITHUB_TOKEN` implicitly.
+
+### 5.3 — SonarCloud
+
+SonarCloud requires three things: the `SONAR_TOKEN` secret, the org key, and the project key. The `fetch-depth: 0` ensures full blame data for accurate code smell attribution.
 
 ```yaml
-  image-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t juice-shop:ci .
-      - name: Trivy image scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: juice-shop:ci
-          severity: CRITICAL
-          exit-code: 1
+-Dsonar.organization=akhil65
+-Dsonar.projectKey=akhil65_DSO
+-Dsonar.sources=devsecops-lab
 ```
 
-## Exercise 5.5 — ZAP Baseline DAST
+Dashboard: https://sonarcloud.io/project/overview?id=akhil65_DSO
 
-```yaml
-  dast-baseline:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Start Juice Shop
-        run: docker run -d -p 3000:3000 bkimminich/juice-shop
-      - name: Wait for app
-        run: sleep 15
-      - name: ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.10.0
-        with:
-          target: http://localhost:3000
-          fail_action: false   # passive scan only — don't fail pipeline
-```
+### 5.4 — Checkov
 
-## Exercise 5.6 — Branch Protection Gate
+Checkov scans IaC files against the CIS Docker Benchmark and Checkov's own policies. `soft_fail: true` means the job always exits 0 (findings are reported but don't block the pipeline on day one). Tighten to `soft_fail: false` once misconfigurations are triaged.
 
-In GitHub: **Settings → Branches → Add rule → main**
+Results upload to the GitHub Security tab via SARIF, alongside Trivy and CodeQL findings.
 
-- ✅ Require status checks to pass before merging
-- Add: `secrets-scan`, `sast`, `dependency-scan`, `image-scan`
-- ✅ Require branches to be up to date
+### 5.5 — Hadolint
+
+Hadolint parses the Dockerfile AST and checks rules like: pinned base image tags, `COPY` over `ADD`, `--no-install-recommends` on `apt-get`, `pipefail` set for piped `RUN` commands.
+
+`failure-threshold: error` means warnings are reported but only errors fail the job. This is a good default for a new codebase.
+
+### 5.6 — ZAP DAST (manual only)
+
+ZAP is gated behind `if: github.event_name == 'workflow_dispatch'`. It should not run on every push because:
+- It spins up Juice Shop (a vulnerable intentional app) on the runner
+- A passive baseline scan takes 2–5 minutes
+- An active scan would take 15+ minutes and would be inappropriate for a shared CI runner
+
+To run ZAP: **GitHub Actions tab → DevSecOps Pipeline → Run workflow**.
+
+---
 
 ## Key Concepts
 
-- **Shift-left security** — finding vulnerabilities at PR time is far cheaper to fix than post-production
-- **Fail-fast on CRITICAL** — `exit-code: 1` causes the job to fail and blocks the merge; HIGH severity is configurable
-- **Secrets in git history** — Gitleaks `fetch-depth: 0` scans all commits, not just the latest push
-- **SCA vs image scan** — SCA scans declared dependencies (package.json); image scan also catches OS-level packages inside the Docker layer
-- **Passive ZAP in CI** — Active scan takes 15+ minutes and sends attack payloads; passive baseline is safe for any target and completes in ~2 minutes
+**Shift-left security** — finding a vulnerability at PR time costs minutes to fix. Finding it in production costs days plus potential breach response.
+
+**SARIF** (Static Analysis Results Interchange Format) — the common output format that all these tools (CodeQL, Trivy, Checkov) use to push findings into GitHub Security → Code scanning alerts. One pane of glass for all scan results.
+
+**Quality gate vs. security gate** — SonarCloud's quality gate blocks a PR if new code introduces too many bugs or smells, regardless of severity. Security gates (Trivy `exit-code: 1`, Gitleaks) block specifically on security findings.
+
+**IaC security** — misconfigurations in Dockerfiles and compose files are infrastructure vulnerabilities: containers running as root, `--privileged` mode, exposed ports without justification, `latest` tags (unpinned = unpredictable).
+
+**Secrets in git history** — deleting a file or rotating a key does not remove it from git history. Anyone who clones the repo can read the old commit. Gitleaks with `fetch-depth: 0` catches this at PR time before it ever reaches main.
+
+---
 
 ## Roadblocks & Fixes
 
 | Roadblock | Fix |
 |-----------|-----|
-| Semgrep action rate-limits without token | Create free semgrep.dev account, add `SEMGREP_APP_TOKEN` to repo secrets |
-| Trivy `exit-code: 1` blocks all PRs on day 1 | Start with `exit-code: 0` (audit mode); tighten to 1 once backlog is triaged |
-| ZAP action fails with "no rules file" | Use `zaproxy/action-baseline@v0.10.0` not the raw Docker run command |
-| Docker layer cache misses slow CI | Add `cache-from: type=gha` to docker/build-push-action |
+| SonarCloud "project not found" | Ensure `sonar.organization` and `sonar.projectKey` match exactly what SonarCloud shows — both lowercase |
+| Gitleaks flags test credentials in lab files | Add a `.gitleaks.toml` allowlist for known test strings (e.g. `Password1!` in crAPI exercises) |
+| Checkov fails on intentionally insecure lab configs | Use `soft_fail: true` during lab — these misconfigurations are intentional for learning |
+| Hadolint fails on `FROM` with `:latest` tag | Either pin the tag in the Dockerfile or add `# hadolint ignore=DL3007` above the offending line |
+| ZAP times out waiting for Juice Shop | The health-check loop retries 30 times at 5s intervals — increase if runner is slow |
+| CodeQL autobuild fails on Python | Python doesn't need building; CodeQL autobuild is a no-op for interpreted languages — that's expected |
+
+---
 
 ## Reports
 

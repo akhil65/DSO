@@ -2,15 +2,19 @@
 # DevSecOps CI/CD Pipeline — GitHub Actions
 # Repo: https://github.com/akhil65/DSO
 #
-# Active jobs:
+# Jobs:
 #   [Module 1]  ✅ docker-validate     — YAML syntax check
 #   [Module 1]  ✅ ossf-scorecard      — repo security posture score
 #   [Module 2]  ✅ sast-bandit         — Python SAST
 #   [Module 2]  ✅ sast-semgrep        — multi-language SAST
-#   [Module 2]  ✅ sca-trivy           — container CVE scan
+#   [Module 2]  ✅ sca-trivy           — dependency + container CVE scan
 #   [Module 2]  ✅ sca-osv             — Google OSV dependency scan
-#   [Module 2]  🔒 codeql              — GitHub SAST (needs JS source — unlock after M2 app added)
-#   [Module 3]  🔒 dast-zap            — OWASP ZAP headless (uncomment in M3)
+#   [Module 5]  ✅ secrets-gitleaks    — secrets detection across full git history
+#   [Module 5]  ✅ sast-codeql         — GitHub native SAST (JS/Python)
+#   [Module 5]  ✅ sast-sonarcloud     — SonarCloud SAST + code quality gate
+#   [Module 5]  ✅ iac-checkov         — Dockerfile + docker-compose IaC scan
+#   [Module 5]  ✅ lint-hadolint       — Dockerfile best-practice linting
+#   [Module 5]  ✅ dast-zap            — OWASP ZAP baseline (workflow_dispatch only)
 # ============================================================
 
 name: DevSecOps Pipeline
@@ -77,37 +81,6 @@ jobs:
         with:
           sarif_file: scorecard-results.sarif
           category: ossf-scorecard
-
-  # ----------------------------------------------------------
-  # MODULE 2 — CodeQL (GitHub native SAST)
-  # Scans JavaScript source code for security vulnerabilities
-  # Unlocked in Module 2 when vulnerable sample app is added
-  # Free for public repositories
-  # ----------------------------------------------------------
-  # codeql:
-  #   name: "M2 · CodeQL SAST"
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     security-events: write
-  #     actions: read
-  #     contents: read
-  #   strategy:
-  #     matrix:
-  #       language: [javascript]
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Initialize CodeQL
-  #       uses: github/codeql-action/init@v3
-  #       with:
-  #         languages: ${{ matrix.language }}
-  #         queries: security-and-quality
-  #     - name: Autobuild
-  #       uses: github/codeql-action/autobuild@v3
-  #     - name: Perform CodeQL Analysis
-  #       uses: github/codeql-action/analyze@v3
-  #       with:
-  #         category: codeql-${{ matrix.language }}
 
   # ----------------------------------------------------------
   # MODULE 2 — SAST: Bandit (Python)
@@ -178,17 +151,172 @@ jobs:
             --lockfile=devsecops-lab/module-2-sast/sample-vulnerable-app/requirements.txt
 
   # ----------------------------------------------------------
-  # MODULE 3 — DAST: OWASP ZAP — unlock in Module 3
+  # MODULE 5 — Secrets Detection: Gitleaks
+  # Scans full git history for leaked API keys, tokens, passwords
+  # fetch-depth: 0 is essential — scans all commits, not just HEAD
   # ----------------------------------------------------------
-  # dast-zap:
-  #   name: "M3 · DAST — ZAP Baseline"
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Start Juice Shop
-  #       run: docker compose -f devsecops-lab/module-1-infrastructure/docker-compose.yml up -d juice-shop
-  #     - name: ZAP Baseline Scan
-  #       uses: zaproxy/action-baseline@v0.11.0
-  #       with:
-  #         target: http://localhost:3000
-  #         artifact_name: zap-baseline-report
+  secrets-gitleaks:
+    name: "M5 · Secrets — Gitleaks"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ----------------------------------------------------------
+  # MODULE 5 — SAST: CodeQL (GitHub native)
+  # Scans JavaScript and Python for security vulnerabilities
+  # Results appear in GitHub Security → Code scanning alerts
+  # Free for public repositories — no token required
+  # ----------------------------------------------------------
+  sast-codeql:
+    name: "M5 · SAST — CodeQL (${{ matrix.language }})"
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript, python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql-${{ matrix.language }}
+
+  # ----------------------------------------------------------
+  # MODULE 5 — SAST + Quality Gate: SonarCloud
+  # Scans for bugs, vulnerabilities, code smells, and coverage
+  # Requires: SONAR_TOKEN secret in repo settings
+  # Organization: akhil65   Project: akhil65_DSO
+  # Dashboard: https://sonarcloud.io/project/overview?id=akhil65_DSO
+  # ----------------------------------------------------------
+  sast-sonarcloud:
+    name: "M5 · SAST — SonarCloud"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for blame data)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=akhil65
+            -Dsonar.projectKey=akhil65_DSO
+            -Dsonar.sources=devsecops-lab
+            -Dsonar.exclusions=**/node_modules/**,**/*.min.js,**/docs/**
+            -Dsonar.python.version=3
+
+  # ----------------------------------------------------------
+  # MODULE 5 — IaC Security: Checkov
+  # Scans Dockerfiles and docker-compose.yml for misconfigurations
+  # Checks against CIS benchmarks and Checkov security policies
+  # ----------------------------------------------------------
+  iac-checkov:
+    name: "M5 · IaC — Checkov"
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: devsecops-lab
+          framework: dockerfile,docker_compose
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+          soft_fail: true
+
+      - name: Upload Checkov results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+          category: checkov
+
+  # ----------------------------------------------------------
+  # MODULE 5 — Dockerfile Linting: Hadolint
+  # Enforces Dockerfile best practices:
+  #   - pinned base image tags (not :latest)
+  #   - COPY preferred over ADD
+  #   - no sudo, no apt-get without --no-install-recommends
+  #   - shell quoting, pipefail set
+  # ----------------------------------------------------------
+  lint-hadolint:
+    name: "M5 · Lint — Hadolint (Dockerfile)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: devsecops-lab/module-1-infrastructure/Dockerfile
+          failure-threshold: error
+
+  # ----------------------------------------------------------
+  # MODULE 5 — DAST: OWASP ZAP Baseline
+  # Passive scan only — no attack payloads, safe for any target
+  # Runs ONLY on workflow_dispatch (manual trigger) to avoid
+  # launching a vulnerable app on every push
+  # To trigger: Actions tab → DevSecOps Pipeline → Run workflow
+  # ----------------------------------------------------------
+  dast-zap:
+    name: "M5 · DAST — ZAP Baseline"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start Juice Shop
+        run: |
+          docker compose \
+            -f devsecops-lab/module-1-infrastructure/docker-compose.yml \
+            up -d juice-shop
+          echo "Waiting for Juice Shop to be ready..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 -o /dev/null; then
+              echo "✅ Juice Shop is up"
+              break
+            fi
+            echo "  attempt $i/30..."
+            sleep 5
+          done
+
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.11.0
+        with:
+          target: http://localhost:3000
+          artifact_name: zap-baseline-report
+          fail_action: false

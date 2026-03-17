@@ -15,7 +15,7 @@
 | [Module 4](./module-4-pentesting/) | Manual Pentesting (Burp Suite, SQLi, XSS, CSRF, IDOR) | ✅ Complete |
 | [Module 4.5](./module-4.5-waf/) | WAF — ModSecurity CRS reverse proxy in front of Juice Shop | ✅ Complete |
 | [Module 4.6](./module-4.6-rasp/) | RASP — Runtime Application Self-Protection (dd-trace, AppSensor, Contrast) | ✅ Complete |
-| [Module 5](./module-5-pipeline/) | CI/CD Pipeline Security (GitHub Actions — Gitleaks, Semgrep, Trivy, ZAP) | 🔒 Locked |
+| [Module 5](./module-5-pipeline/) | CI/CD Pipeline Security (GitHub Actions — Gitleaks, Semgrep, CodeQL, SonarCloud, Trivy, OSV, Checkov, Hadolint, ZAP) | ✅ Complete |
 | [Module 6](./module-6-ai-security/) | AI Application Security & MLSecOps (Prompt Injection, OWASP LLM Top 10) | 🔒 Locked |
 | [Module 7](./module-7-mobile/) | Mobile AppSec — Android Static & Dynamic Analysis (MobSF, Frida, DIVA) | 🔒 Locked |
 
@@ -31,6 +31,7 @@
 **API Security:** ZAP (GUI + OpenAPI scan) · crAPI · kiterunner · jwt_tool · OWASP API Top 10
 **WAF:** OWASP ModSecurity CRS v3 + nginx (Docker)
 **RASP:** rasp-hook.js (custom) · AppSensor · dd-trace v4 + libddwaf · @contrast/rasp-v3 (documented, incompatible)
+**CI/CD Pipeline:** GitHub Actions · Gitleaks · CodeQL · SonarCloud · Checkov · Hadolint · OSSF Scorecard
 **Mobile:** MobSF · Frida · Objection · OWASP MASTG
 **AI Security:** Garak · Rebuff · Prompt Injection · OWASP LLM Top 10
 
@@ -92,6 +93,12 @@ Detailed guides and scan reports for each module live in the [`docs/`](./docs/) 
 | Module 4.6 | AppSensor escalating response confirmed: LOG→429→403 per IP |
 | Module 4.6 | Contrast RASP v3 incompatible on ARM64 + Node 24 — documented with root cause |
 | Module 4.6 | Datadog ASM: libddwaf loaded, custom blocking rules deployed — 403 confirmed for SQLi/XSS/LFI |
+| Module 5 | 9-tool security pipeline live — Gitleaks, Semgrep, CodeQL, SonarCloud, Trivy, OSV, Checkov, Hadolint, ZAP |
+| Module 5 | SonarCloud connected: org=akhil65, project=akhil65_DSO, SONAR_TOKEN configured |
+| Module 5 | ZAP DAST gated to workflow_dispatch — passive baseline scan against Juice Shop |
+| Module 5 | Checkov IaC scan: Dockerfiles and docker-compose scanned against CIS Docker Benchmark |
+| Module 5 | Hadolint: Dockerfile best-practice linting added to pipeline |
+| Module 5 | CodeQL enabled for JS + Python via matrix strategy — results in GitHub Security tab |
 
 ---
 
