@@ -20,12 +20,15 @@ COPY contrast-rasp-loader.mjs /build/contrast-rasp-loader.mjs
 # ─── Stage 2: inject into distroless Juice Shop ───────────────────────────────
 FROM bkimminich/juice-shop:latest
 
-COPY --from=builder --chmod=755 /build/node_modules/@contrast /juice-shop/contrast_modules/@contrast
+# Copy ALL of node_modules — not just @contrast scope.
+# @contrast/require-hook depends on non-scoped packages (parent-package-json, etc.)
+# that live at /build/node_modules/parent-package-json, not under @contrast/.
+# Copying the full tree ensures every transitive dependency is present.
+COPY --from=builder --chmod=755 /build/node_modules /juice-shop/contrast_modules
 COPY --from=builder --chmod=644 /build/contrast-rasp-loader.mjs /juice-shop/contrast-rasp-loader.mjs
 
-# NODE_PATH: rasp-v3's initialize.js requires '@contrast/require-hook' by bare name.
-# That package is at /juice-shop/contrast_modules/@contrast/require-hook, but Node.js
-# won't find it unless we tell it to look in /juice-shop/contrast_modules/.
+# NODE_PATH: lets @contrast packages find their non-scoped deps (parent-package-json
+# etc.) via bare require() from inside /juice-shop/contrast_modules/@contrast/...
 ENV NODE_PATH="/juice-shop/contrast_modules"
 
 # --import (not --require) loads an ES module before the app starts.
