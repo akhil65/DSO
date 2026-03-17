@@ -45,6 +45,14 @@ COPY --from=builder --chmod=644 /build/datadog-rasp-wrapper.js /juice-shop/datad
 
 ENV NODE_OPTIONS="--require /juice-shop/datadog-rasp-wrapper.js"
 
+# FIX: dd-trace's internal code requires 'dc-polyfill' by bare name.
+# Since we installed dd-trace to /juice-shop/dd_modules (not the standard
+# node_modules path), Node.js module resolution can't find dc-polyfill
+# when called from deep inside dd-trace's package tree.
+# NODE_PATH adds /juice-shop/dd_modules as a fallback lookup directory,
+# so require('dc-polyfill') resolves to /juice-shop/dd_modules/dc-polyfill.
+ENV NODE_PATH="/juice-shop/dd_modules"
+
 # ── Optional: set these in .env to connect to Datadog dashboard ───────────────
 # DD_API_KEY is NOT required for local blocking — only for dashboard visibility.
 ENV DD_ENV="lab"

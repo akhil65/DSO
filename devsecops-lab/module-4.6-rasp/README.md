@@ -63,9 +63,9 @@ module-4.6-rasp/
 |---|----------|------|--------|
 | 4.6.1 | Deploy custom RASP agent in Juice Shop via Docker | rasp-hook.js | ✅ Complete |
 | 4.6.2 | Verify SQLi blocked at runtime (not at HTTP layer) | rasp-hook.js | ✅ Complete |
-| 4.6.3 | Deploy Contrast RASP v3 (OSS npm package, no account) | @contrast/rasp-v3 | 🔲 Run locally |
-| 4.6.4 | Implement AppSensor escalating response (LOG→WARN→BLOCK) | appsensor-hook.js | ✅ Logic confirmed |
-| 4.6.5 | Deploy Datadog ASM — the Sqreen successor | dd-trace + libddwaf | 🔲 Run locally |
+| 4.6.3 | Deploy Contrast RASP v3 (OSS npm package, no account) | @contrast/rasp-v3 | 🔧 Fixed — rebuild needed |
+| 4.6.4 | Implement AppSensor escalating response (LOG→WARN→BLOCK) | appsensor-hook.js | ✅ Confirmed in Docker |
+| 4.6.5 | Deploy Datadog ASM — the Sqreen successor | dd-trace + libddwaf | 🔧 Fixed — rebuild needed |
 | 4.6.6 | Study Signal Sciences hybrid WAF/RASP sidecar architecture | sigsci-middleware-example.js | ✅ Architecture reviewed |
 
 > **Quick start:** `chmod +x run-exercises.sh && ./run-exercises.sh` — builds and tests 4.6.3, 4.6.4, and 4.6.5 in sequence with automated pass/fail output.
@@ -233,14 +233,21 @@ Hit 5: 403    ← BLOCK
 Hit 6: 403    ← BLOCK
 ```
 
-**Confirmed via unit test (5/5 tests pass — no Docker required):**
+**Confirmed in Docker (Node.js v24, arm64):**
 ```
-[AppSensor] LOG   | DP=IE1 | IP=10.0.0.1 | count=1 | url_param=q='+OR+1=1--
-[AppSensor] LOG   | DP=IE1 | IP=10.0.0.1 | count=2 | url_param=q='+OR+1=1--
-[AppSensor] WARN  | DP=IE1 | IP=10.0.0.1 | count=3 | url_param=q='+OR+1=1--
-[AppSensor] BLOCK | DP=IE1 | IP=10.0.0.1 | count=5 | url_param=q='+OR+1=1--
+[AppSensor] Agent initialized
+[AppSensor] Detection points: IE1 (URL SQLi), IE2 (DB SQLi), ACE1 (force-browse), RE1 (long param)
+[AppSensor] LOG    | DP=ACE1 | IP=::ffff:192.168.65.1 | count=1 | url=/rest/admin/application-version
+[AppSensor] LOG    | DP=IE1  | IP=::ffff:192.168.65.1 | count=1 | url_param=' OR 1=1--
 ```
-✅ IE1 escalation | ✅ clean pass | ✅ ACE1 force-browse | ✅ independent IP counters | ✅ RE1 long param
+
+Hit 1: 500 | Hit 2: 429 | Hit 3: 429 | Hit 4: 429 | Hit 5: 403 | Hit 6: 403
+
+**Why hit 1 returns 500 instead of 200:** AppSensor LOGs (passes through) correctly, but Juice Shop's SQLite layer receives the malicious query and throws a syntax error. The 500 comes from SQLite, not AppSensor — AppSensor is working as designed.
+
+**Why WARN hits on hit 2 instead of hit 3:** Juice Shop's search endpoint runs multiple DB queries per HTTP request (COUNT + SELECT). IE2 fires for each one, so the counter increments faster than a single-query-per-request assumption. This is a real-world tuning lesson: multi-query endpoints require adjusting thresholds or counting at HTTP level only (IE1).
+
+✅ Attack detected | ✅ Escalation working | ✅ ACE1 fires on Juice Shop's own admin calls (startup false-positive to note)
 
 **Watch the escalation in logs:**
 ```bash
