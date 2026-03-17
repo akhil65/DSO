@@ -23,6 +23,11 @@ FROM bkimminich/juice-shop:latest
 COPY --from=builder --chmod=755 /build/node_modules/@contrast /juice-shop/contrast_modules/@contrast
 COPY --from=builder --chmod=644 /build/contrast-rasp-loader.mjs /juice-shop/contrast-rasp-loader.mjs
 
+# NODE_PATH: rasp-v3's initialize.js requires '@contrast/require-hook' by bare name.
+# That package is at /juice-shop/contrast_modules/@contrast/require-hook, but Node.js
+# won't find it unless we tell it to look in /juice-shop/contrast_modules/.
+ENV NODE_PATH="/juice-shop/contrast_modules"
+
 # --import (not --require) loads an ES module before the app starts.
 # Node.js waits for all top-level awaits to finish before starting Juice Shop.
 # file:// prefix is required for absolute paths with --import.
