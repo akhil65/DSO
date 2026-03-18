@@ -262,20 +262,26 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Checkov
-        uses: bridgecrewio/checkov-action@master
-        continue-on-error: true
-        with:
-          directory: devsecops-lab
-          framework: dockerfile,docker_compose
-          output_format: sarif
-          output_file_path: console,${{ github.workspace }}/checkov-results.sarif
+        run: |
+          pip install checkov -q
+          checkov -d devsecops-lab \
+                  --framework dockerfile,docker_compose \
+                  --output cli \
+                  --soft-fail || true
 
-      - name: Upload Checkov results to Security tab
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Run Checkov (JSON artifact)
+        run: |
+          checkov -d devsecops-lab \
+                  --framework dockerfile,docker_compose \
+                  --output json \
+                  --soft-fail > checkov-results.json 2>/dev/null || true
+
+      - name: Upload Checkov results
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          sarif_file: ${{ github.workspace }}/checkov-results.sarif
-          category: checkov
+          name: checkov-report
+          path: checkov-results.json
 
   # ----------------------------------------------------------
   # MODULE 5 — Dockerfile Linting: Hadolint
