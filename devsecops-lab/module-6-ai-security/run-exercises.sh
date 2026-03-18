@@ -267,7 +267,7 @@ garak --model_type ollama \
       --probes promptinject,dan \
       --generations 1 \
       --report_prefix /tmp/garak-m6 2>&1 | tail -30 || \
-  echo "[!] Garak failed — try: garak --model_type rest --model_name http://localhost:11434/api/generate --probes promptinject"
+  echo "[!] Garak scan interrupted or failed. Re-run manually: garak --model_type ollama --model_name llama3.2:1b --probes promptinject,dan --generations 1 --report_prefix /tmp/garak-m6"
 
 echo ""
 if ls /tmp/garak-m6*.report.jsonl 2>/dev/null | head -1 | grep -q .; then
@@ -311,7 +311,7 @@ for p in payloads:
     sanitized, valid, score = scan_prompt([scanner], p)
     status = '✅ ALLOWED' if valid.get('PromptInjection', True) else '🛑 BLOCKED'
     print(f'{status}  score={score.get(\"PromptInjection\",0):.2f}  input={p[:60]}')
-" 2>/dev/null || echo "[!] LLM Guard not installed — run: pip install llm-guard --break-system-packages"
+" 2>/dev/null || echo "[!] LLM Guard not installed (intentionally excluded from container — it pulls PyTorch/Transformers and makes the image very heavy). To run this step: pip install llm-guard --break-system-packages"
 
 echo ""
 echo "============================================"
