@@ -16,7 +16,7 @@
 | [Module 4.5](./module-4.5-waf/) | WAF — ModSecurity CRS reverse proxy in front of Juice Shop | ✅ Complete |
 | [Module 4.6](./module-4.6-rasp/) | RASP — Runtime Application Self-Protection (dd-trace, AppSensor, Contrast) | ✅ Complete |
 | [Module 5](./module-5-pipeline/) | CI/CD Pipeline Security (GitHub Actions — Gitleaks, Semgrep, CodeQL, SonarCloud, Trivy, OSV, Checkov, Hadolint, ZAP) | ✅ Complete |
-| [Module 6](./module-6-ai-security/) | AI Application Security & MLSecOps (Prompt Injection, OWASP LLM Top 10) | 🔒 Locked |
+| [Module 6](./module-6-ai-security/) | AI Application Security (OWASP LLM Top 10, Prompt Injection, Garak, LLM Guard, SecLists) | ✅ Complete |
 | [Module 7](./module-7-mobile/) | Mobile AppSec — Android Static & Dynamic Analysis (MobSF, Frida, DIVA) | 🔒 Locked |
 
 ---
@@ -33,7 +33,7 @@
 **RASP:** rasp-hook.js (custom) · AppSensor · dd-trace v4 + libddwaf · @contrast/rasp-v3 (documented, incompatible)
 **CI/CD Pipeline:** GitHub Actions · Gitleaks · CodeQL · SonarCloud · Checkov · Hadolint · OSSF Scorecard
 **Mobile:** MobSF · Frida · Objection · OWASP MASTG
-**AI Security:** Garak · Rebuff · Prompt Injection · OWASP LLM Top 10
+**AI Security:** Ollama (llama3.2:1b) · Garak · LLM Guard · SecLists LLM · OWASP LLM Top 10 · Prompt Injection (direct + indirect)
 
 ---
 
@@ -99,6 +99,13 @@ Detailed guides and scan reports for each module live in the [`docs/`](./docs/) 
 | Module 5 | Checkov IaC scan: Dockerfiles and docker-compose scanned against CIS Docker Benchmark |
 | Module 5 | Hadolint: Dockerfile best-practice linting added to pipeline |
 | Module 5 | CodeQL enabled for JS + Python via matrix strategy — results in GitHub Security tab |
+| Module 6 | Vulnerable LLM app deployed — 5 endpoints covering LLM01/02/06/08/09 |
+| Module 6 | Direct prompt injection confirmed: system prompt + secrets leaked via /api/chat |
+| Module 6 | Indirect injection confirmed: malicious document content hijacks LLM response |
+| Module 6 | Overreliance: LLM used as auth gate — DENY flipped to ALLOW via injection |
+| Module 6 | Excessive agency: LLM triggered delete_file + send_email without confirmation |
+| Module 6 | Garak + SecLists LLM wordlist automated sweep integrated |
+| Module 6 | LLM Guard input scanner deployed as defense layer |
 
 ---
 
