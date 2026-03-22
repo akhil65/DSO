@@ -1,0 +1,31 @@
+# Module 6.5 — Adversarial ML requirements
+# Install in the existing llm-guard-env conda environment (already has torch + transformers)
+#   conda activate llm-guard-env
+#   pip install -r requirements.txt
+#
+# OR create a fresh env:
+#   conda create -n adv-ml-env python=3.11 -y
+#   conda activate adv-ml-env
+#   pip install -r requirements.txt
+
+# Core ML
+torch>=2.0.0
+torchvision>=0.15.0
+scikit-learn>=1.3.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+
+# Adversarial robustness
+adversarial-robustness-toolbox[pytorch,sklearn]>=1.17.0
+foolbox>=3.3.4
+
+# NLP adversarial attacks
+textattack>=0.3.10
+
+# HuggingFace (already in llm-guard-env — may skip)
+transformers>=4.30.0
+datasets>=2.14.0
+
+# Visualisation / utilities
+Pillow>=10.0.0
+tqdm>=4.65.0
