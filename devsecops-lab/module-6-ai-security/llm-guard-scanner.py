@@ -75,10 +75,11 @@ RESET  = "\033[0m"
 def run_scan():
     try:
         from llm_guard.input_scanners import PromptInjection
-        from llm_guard.scan_prompt import scan_prompt
-    except ImportError:
-        print(f"{RED}[!] llm-guard is not installed.{RESET}")
-        print("    Run:  pip install llm-guard")
+    except Exception as e:
+        import traceback
+        print(f"{RED}[!] Failed to import llm-guard:{RESET}")
+        traceback.print_exc()
+        print(f"\n    If llm-guard is not installed: pip install llm-guard")
         sys.exit(1)
 
     print(f"\n{BOLD}{'='*70}{RESET}")
@@ -100,25 +101,26 @@ def run_scan():
             print(f"  {'-'*65}")
             current_family = family
 
-        sanitized, valid, score = scan_prompt([scanner], payload)
-        injection_valid = valid.get("PromptInjection", True)
-        injection_score = score.get("PromptInjection", 0.0)
+        # llm-guard 0.3.x API: scanner.scan(prompt) → (sanitized, is_valid, risk_score)
+        sanitized, injection_valid, injection_score = scanner.scan(prompt=payload)
 
-        if not injection_valid:
+        # injection_valid=False means injection detected (blocked)
+        # injection_score is a float risk score (higher = more suspicious)
+        detected = not injection_valid
+        if detected:
             status = f"{RED}🛑 BLOCKED{RESET}"
-            detected = True
         else:
             status = f"{GREEN}✅ ALLOWED{RESET}"
-            detected = False
 
+        score_val = injection_score if isinstance(injection_score, float) else 0.0
         display_payload = payload[:62] + "…" if len(payload) > 62 else payload
-        print(f"  {status}  score={injection_score:.3f}  {display_payload}")
+        print(f"  {status}  score={score_val:.3f}  {display_payload}")
 
         results.append({
             "family": family,
             "payload": payload,
             "blocked": detected,
-            "score": round(injection_score, 3),
+            "score": round(score_val, 3),
             "valid": injection_valid,
         })
 
