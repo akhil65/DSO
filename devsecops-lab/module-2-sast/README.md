@@ -7,6 +7,18 @@ then wire them into the CI/CD pipeline.
 
 ---
 
+## Real-World Context
+
+SAST and SCA are the first security controls most organisations deploy because they require no running infrastructure — they analyse source code and dependency manifests directly. In practice, developers rarely run these tools manually. They are wired into the CI/CD pipeline so that every pull request automatically triggers a scan, and findings surface as PR annotations or a failed check before the code is even reviewed by a human. The manual runs in this module teach you what the tools actually do; the pipeline integration in Module 5 is how they are used day-to-day.
+
+**Who owns this in a real org:** The AppSec team defines which rules are enabled, what severity threshold blocks a merge (typically Critical and High), and maintains the rule configuration in version control alongside the pipeline definition. Developers own remediation — they receive a finding on their PR, fix the code, and re-push. The AppSec team triages false positives, suppresses specific findings with justification, and reviews the overall trend across the codebase using dashboards like SonarCloud or the GitHub Security tab. SCA findings (vulnerable dependencies) are often handled separately by a platform or dependencies team that tracks CVEs across the entire organisation's software bill of materials (SBOM).
+
+**Dev → Staging → Production:** In development, engineers can run Bandit or Semgrep locally via IDE plugins (VS Code has native Semgrep and Bandit extensions) to catch issues before they commit. In the CI pipeline (staging gate), SAST runs on every push and PR — a Critical finding blocks the merge. Production deployments inherit the clean bill of health from CI; nothing that failed a security gate reaches production. SCA tooling like Trivy and OSV Scanner also run continuously in production environments to catch newly disclosed CVEs in dependencies that were safe at build time.
+
+**How findings reach stakeholders:** A developer sees a Bandit `B608: SQL injection` finding as a failed GitHub check with a direct link to the vulnerable line. An engineering manager sees a SonarCloud quality gate dashboard showing the team's security debt trend over sprints. A CISO sees a monthly report on critical vulnerability count, mean time to remediation, and which teams are consistently introducing security issues. The tooling is the same at every level — what changes is the aggregation and the audience.
+
+---
+
 ## Tools
 
 | Tool | Type | Install |

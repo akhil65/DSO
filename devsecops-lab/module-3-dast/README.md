@@ -7,6 +7,20 @@ DAST attacks a live running application with real HTTP payloads — confirming r
 **Tool:** OWASP ZAP 2.16.1
 **Target:** OWASP Juice Shop (http://localhost:3000)
 
+---
+
+## Real-World Context
+
+DAST occupies a different position in the security programme than SAST. Because it requires a live, running application to test against, it cannot run at the code-commit stage — it runs in staging, after a build has been deployed and the application is accessible over HTTP. This makes DAST a later-stage control: it catches what slips through SAST (runtime configuration issues, authentication flaws, business logic vulnerabilities) and confirms that findings are genuinely exploitable, not just theoretical code patterns.
+
+**Who owns this in a real org:** The AppSec team typically owns ZAP configuration and result triage. They maintain authenticated scan contexts (ZAP needs valid session cookies to scan behind a login), define the scope of what gets scanned, and run the active scanner in a controlled way against the staging environment where destructive payloads cannot affect production data. Some organisations embed a ZAP baseline scan directly in the CI/CD pipeline as a post-deploy check in staging — this is covered in Module 5. The results are triaged by AppSec and filed as tickets to the development team, with severity-based SLA expectations (Critical fixed within 24 hours, High within one sprint, and so on).
+
+**Dev → Staging → Production:** Developers generally do not run DAST locally — the tooling is heavy and the payloads can break or corrupt running applications. In staging, automated ZAP baseline scans run after every deployment, with results flowing into the ticketing system (Jira, Linear, GitHub Issues). Before a major release, AppSec or the red team may run a full active scan with authenticated contexts to maximise coverage. Production is not scanned actively — active scanning sends attack payloads that can corrupt data, trigger alerts, and create audit noise. Production security is handled by WAF (Module 4.5), monitoring, and periodic external penetration tests.
+
+**How findings reach stakeholders:** Developers see ZAP findings as tickets in their sprint backlog, categorised by OWASP category and severity. Engineering managers see the trend of open DAST findings across releases — a rising count before a launch is a risk conversation with the CISO. Security engineers use the ZAP report to prioritise which issues need manual verification (some DAST findings are false positives that require a human to confirm exploitability). Confirmed findings that represent data exposure or authentication bypass are escalated immediately outside the normal ticketing flow.
+
+---
+
 ## Prerequisites
 
 - Module 1 complete — Juice Shop running on port 3000

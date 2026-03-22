@@ -16,6 +16,18 @@
 
 ---
 
+## Real-World Context
+
+Module 5 is the connective tissue of the entire lab — it is where all the individual tools from Modules 2, 3, and 4 stop being things you run manually and become automated gates that run on every commit without anyone having to remember to invoke them. This is what "shifting security left" actually means in practice: the security check happens at the earliest possible point where it can catch the problem — on the developer's PR, before a human reviewer even looks at the code, and certainly before it reaches production.
+
+**Who owns this in a real org:** The AppSec team owns the pipeline security configuration in collaboration with the DevOps or platform engineering team. AppSec defines which tools run, which rule sets are active, and what threshold constitutes a blocking failure (typically: any Critical severity finding blocks the merge; High findings may warn or block depending on the organisation's risk tolerance). The platform team owns the GitHub Actions infrastructure, manages secrets (API keys for SonarCloud, Snyk tokens), and ensures the pipeline runs efficiently. Developers interact with the output — they see failing checks on their PR and are responsible for resolving them before merging.
+
+**Dev → Staging → Production:** In development, engineers use IDE plugins (Semgrep, SonarLint, Gitleaks pre-commit hooks) to catch issues before they even commit. The CI pipeline is the enforcement layer — it catches what local tooling misses and provides a consistent, auditable record. In staging, additional pipeline jobs run that require the full deployed application: DAST scans, integration tests, load tests with security assertions. Production deployments are gated behind all of these checks passing. Some organisations add a separate deployment approval step for production — a human sign-off from AppSec or a change management process — on top of the automated gates.
+
+**How findings reach stakeholders:** Developers see pipeline failures as red checks on their PR with links to the specific finding. Engineering managers see pipeline pass rates and security debt trends in dashboards — a team with a consistently high rate of security gate failures is a risk signal that feeds into quarterly planning. The CISO sees compliance evidence: the pipeline configuration itself is auditable proof that security checks are embedded in every deployment. When a critical vulnerability is published (a new CVE in a widely-used library), the SCA tools in the pipeline will flag every affected repository automatically on the next push, giving the security team a prioritised list of which teams need to update before an attacker can exploit the gap.
+
+---
+
 ## Tools
 
 | Tool | Category | Role | Free? |

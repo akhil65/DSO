@@ -6,6 +6,18 @@ Three containers are launched: **OWASP Juice Shop**, **DVWA**, and **Portainer**
 
 ---
 
+## Real-World Context
+
+In a production organisation, infrastructure is never provisioned by hand. Platform and infrastructure engineering teams define every environment — development, staging, and production — as code using tools like Terraform, Pulumi, or AWS CloudFormation. Docker Compose is the local development analogue of that practice: a declarative manifest that describes what services run, how they connect, and what configuration they receive. The same principle applies at every scale.
+
+**Who owns this in a real org:** The platform engineering team owns the infrastructure manifests and the CI/CD pipelines that deploy them. Developers consume environments; they rarely provision them. A security engineer or AppSec team member reviews the infrastructure definitions during design — checking for overly permissive network policies, containers running as root, secrets baked into environment variables, and misconfigurations against benchmarks like CIS Docker or CIS Kubernetes. Tools like Checkov and tfsec (covered in Module 5) automate that review as a pipeline gate.
+
+**Dev → Staging → Production:** In development, engineers spin up local environments like this one to validate their application changes in isolation. In staging, the same Compose or Kubernetes manifests are deployed to a shared environment that mirrors production — this is where integration testing and security scanning happen before anything reaches users. In production, infrastructure changes go through a pull request process with peer review and automated policy checks; nothing deploys manually. The Portainer GUI used here for visibility has a production equivalent in tools like Grafana, Datadog, or the native console of whichever cloud platform the org uses.
+
+**The security conversation:** When a security team reviews infrastructure, the questions they ask are: which ports are exposed and to whom, what user does each container run as, where are secrets coming from (never hardcoded — they should come from a secrets manager like HashiCorp Vault or AWS Secrets Manager), and what happens if one container is compromised — can it reach the database directly? This module establishes the baseline environment all other security testing in the lab depends on, mirroring how a real org's secure baseline infrastructure underpins every application that runs on top of it.
+
+---
+
 ## Prerequisites
 
 ```bash

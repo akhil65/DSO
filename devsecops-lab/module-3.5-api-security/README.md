@@ -15,6 +15,18 @@
 
 ---
 
+## Real-World Context
+
+APIs are the dominant attack surface in modern applications — the OWASP API Security Top 10 exists separately from the Web Top 10 precisely because APIs fail in distinctive ways that general web scanners miss. Object-level authorisation issues (BOLA/IDOR), mass assignment, and excessive data exposure are architectural problems in API design, not code bugs, which means they often survive SAST and DAST scans entirely. Catching them requires understanding the API's intended behaviour and testing whether enforcement holds up under manipulation.
+
+**Who owns this in a real org:** API security testing is a shared responsibility between AppSec and backend engineering. During design, AppSec participates in API threat modelling — reviewing the OpenAPI spec for endpoints that expose sensitive object IDs, operations that accept more fields than they should, or responses that return more data than the client needs. In testing, AppSec or a red team runs authenticated scanning with the OpenAPI spec in ZAP and performs manual BOLA testing using Burp Suite, verifying whether user A can access user B's resources by manipulating object IDs. Shadow API discovery (kiterunner) is used to find endpoints the team doesn't know they're exposing — undocumented routes that bypass authentication are a consistent finding in mature organisations.
+
+**Dev → Staging → Production:** API security gates in CI/CD focus on spec compliance — automated checks verify that the implementation matches the OpenAPI spec and flag undocumented endpoints. In staging, the full authenticated API scan runs after each deployment. In production, an API gateway (Kong, AWS API Gateway, Apigee) enforces authentication, rate limiting, and request validation as a first line of defence — but gateway-level enforcement does not replace application-level authorisation logic, which is the more common failure point. Bug bounty programmes consistently surface BOLA issues because they require authenticated, human-driven testing at a depth that automated tools rarely reach.
+
+**How findings reach stakeholders:** A confirmed BOLA finding — where user A can read user B's data by changing a number in a URL — is not a sprint backlog ticket. It triggers an incident response decision: is data already exfiltrated, does the product need to be taken offline while a fix is deployed, and is there a breach notification obligation? Less severe findings (excessive data exposure, missing rate limits, mass assignment) feed into the normal security backlog. The structured findings report produced in this module is the format AppSec teams use to brief engineering and product leadership on API risk posture ahead of a launch or after a penetration test.
+
+---
+
 ## Tools
 
 | Tool | Role | Install |

@@ -14,6 +14,18 @@
 
 ---
 
+## Real-World Context
+
+AI security is the newest domain in this lab and the one where organisational practices are still forming. Most teams building LLM-powered products do not have a dedicated AI security function yet — the responsibility sits somewhere between AppSec, the ML platform team, and the product engineers building the application. That ambiguity is itself a risk. The OWASP LLM Top 10 exists to give teams a common vocabulary and a checklist, the same way the Web Top 10 did for web security twenty years ago.
+
+**Who owns this in a real org:** In organisations that have started to formalise AI security, the AppSec team owns pre-deployment model risk assessment (running Garak against the target model endpoint in staging) and defines the requirements for LLM Guard or equivalent input/output scanning middleware. The ML platform team deploys and operates the LLM infrastructure — the API endpoint, the model serving layer, the prompt templates — and is responsible for ensuring secrets are never in system prompts and that the application does not grant the model excessive tool access. Product engineers own the application layer: the Flask app equivalent, the endpoint design, the trust boundaries between user input and model context. In practice, all three teams need to collaborate in the design phase — once a model is deployed with a broken trust boundary, fixing it is an architectural change, not a patch.
+
+**Dev → Staging → Production:** In development, engineers building LLM features should run basic prompt injection tests manually — the curl commands in Exercises 6.1 through 6.6 are a reasonable starting checklist for any LLM endpoint before it leaves the developer's laptop. In staging, Garak runs against the actual model endpoint (pointed at the staging API, not a local Ollama instance) to assess the model's resistance to known attack families. LLM Guard or equivalent scanning middleware is deployed in staging in detection mode, and its logs are reviewed before production launch. In production, LLM Guard runs in blocking mode as middleware, logs feed into the SIEM, and AppSec monitors for novel attack patterns. The red team runs targeted prompt injection assessments quarterly, using current attack techniques that Garak's probe library may not yet cover.
+
+**How findings reach stakeholders:** A pre-launch Garak report showing that translation framing attacks reliably extract system prompt contents is a launch-blocking finding — it goes to the product owner and engineering lead immediately, not into a backlog. The fix is architectural: secrets must be removed from the system prompt, and LLM Guard must be deployed before go-live. A post-deployment LLM Guard monitoring report showing 500 blocked injection attempts per day tells the CISO that the product is being actively probed and that the defence layer is functioning. An LLM used as an authentication gate (Exercise 6.5 in this module) is a design pattern that should never reach production — it is the AppSec team's responsibility during design review to catch this before code is written, not after.
+
+---
+
 ## OWASP LLM Top 10 (2025)
 
 | # | Risk | Demonstrated |

@@ -8,6 +8,20 @@
 | Sees | Raw HTTP before decoding | Decoded data at function call level |
 | Bypass risk | Higher — encoding tricks may evade rules | Lower — sees actual query sent to DB |
 
+---
+
+## Real-World Context
+
+A WAF sees what arrives at the door. RASP sees what actually happens inside the house. Because RASP instruments the application runtime — hooking into database calls, file system operations, and process execution at the code level — it cannot be bypassed with encoding tricks that fool regex-based WAF rules. An attacker who successfully evades the WAF still hits the RASP when their payload reaches the actual database driver. This is why RASP and WAF are complementary rather than competing controls, and why mature security programmes run both.
+
+**Who owns this in a real org:** RASP is deployed by the platform or DevOps team as part of the application container configuration — it is an agent or library loaded at application startup, not something developers install manually. Commercial RASP products (Datadog ASM, Contrast Security, Sqreen/Snyk) are provisioned at the infrastructure level: a sidecar container, an environment variable that activates the agent, or a JVM argument that loads the instrumentation library. Developers may not even know RASP is running — it is transparent to application code when operating correctly. When RASP does block a request, the platform team and AppSec are alerted, and the AppSec team determines whether it was a genuine attack or a false positive requiring a rule exclusion.
+
+**Dev → Staging → Production:** In development, RASP is typically not active — the overhead and configuration complexity are not worthwhile for local testing. In staging, RASP runs in detection (observe-only) mode, logging what it would have blocked without actually blocking anything. This tuning phase is critical: AppSec reviews RASP observations in staging to identify false positives before enabling blocking mode in production. In production, RASP runs in blocking mode. Every blocked event is logged to the SIEM. A spike in RASP blocks — especially across multiple application instances simultaneously — is a strong signal that an active exploitation attempt is underway, which triggers an incident response process.
+
+**How findings reach stakeholders:** Unlike pentest reports, RASP does not produce a one-time findings document. It produces a continuous stream of runtime security events. These feed into the SIEM as structured logs with context (which endpoint was hit, what the payload looked like, which rule triggered, whether the request was blocked). The security operations team (SOC) monitors these in real time. Monthly, the security team reports RASP block rates to engineering leadership as a measure of active attack volume against production. A developer whose feature is consistently triggering RASP rules receives a notification from AppSec — either their code has a genuine vulnerability that an attacker is probing, or the RASP rule needs tuning for their legitimate use case.
+
+---
+
 ## Tools Covered
 
 | Tool | Type | Account | Port |
