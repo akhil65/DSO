@@ -17,7 +17,34 @@ DAST occupies a different position in the security programme than SAST. Because 
 
 **Dev → Staging → Production:** Developers generally do not run DAST locally — the tooling is heavy and the payloads can break or corrupt running applications. In staging, automated ZAP baseline scans run after every deployment, with results flowing into the ticketing system (Jira, Linear, GitHub Issues). Before a major release, AppSec or the red team may run a full active scan with authenticated contexts to maximise coverage. Production is not scanned actively — active scanning sends attack payloads that can corrupt data, trigger alerts, and create audit noise. Production security is handled by WAF (Module 4.5), monitoring, and periodic external penetration tests.
 
+**How tools integrate with the developer pipeline:** ZAP is not a developer IDE tool — it is a staging gate invoked headlessly by the CI pipeline after a build is deployed. The Docker image makes it CI-native: no GUI install needed, runs in any container-based pipeline. Here is how this looks in practice:
+
+```bash
+# Baseline scan — fast, passive, safe for CI (30–60 seconds)
+# Runs after every deploy to staging; non-destructive, no attack payloads
+docker run --rm -v $(pwd):/zap/wrk/:rw zaproxy/zap-stable \
+  zap-baseline.py -t https://staging.yourapp.com \
+  -r zap-baseline-report.html -J zap-baseline.json \
+  -I  # don't fail on informational findings, only WARN/FAIL
+
+# Full active scan — destructive, staging only, run before major releases
+# Requires authenticated context file exported from ZAP GUI
+docker run --rm -v $(pwd):/zap/wrk/:rw zaproxy/zap-stable \
+  zap-full-scan.py -t https://staging.yourapp.com \
+  -n auth-context.context -U testuser@example.com \
+  -r zap-full-report.html -l PASS
+
+# API scan — target an OpenAPI spec directly (no browser needed)
+docker run --rm -v $(pwd):/zap/wrk/:rw zaproxy/zap-stable \
+  zap-api-scan.py -t https://staging.yourapp.com/api/openapi.json \
+  -f openapi -r zap-api-report.html
+```
+
+The baseline scan is the CI-safe version — passive only, no attack payloads, exits non-zero on FAIL-level findings so the pipeline gate works. The full active scan is the release gate — run by AppSec before a major launch, not on every PR. The authenticated context file is created once in the ZAP GUI (recording a login sequence) and saved to the repo so headless CI runs can scan behind authentication without manual steps.
+
 **How findings reach stakeholders:** Developers see ZAP findings as tickets in their sprint backlog, categorised by OWASP category and severity. Engineering managers see the trend of open DAST findings across releases — a rising count before a launch is a risk conversation with the CISO. Security engineers use the ZAP report to prioritise which issues need manual verification (some DAST findings are false positives that require a human to confirm exploitability). Confirmed findings that represent data exposure or authentication bypass are escalated immediately outside the normal ticketing flow.
+
+**Lab vs real world:** In this module you run ZAP through the GUI, proxy traffic through it manually, and trigger scans interactively. In a real org the GUI is used only to build the authenticated context file and tune the scan configuration — day-to-day DAST runs headlessly in CI using the Docker image. The GUI skills you build here directly translate to that setup; the context files you export from the GUI are exactly what the headless Docker command consumes.
 
 ---
 

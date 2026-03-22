@@ -24,7 +24,90 @@ Module 5 is the connective tissue of the entire lab — it is where all the indi
 
 **Dev → Staging → Production:** In development, engineers use IDE plugins (Semgrep, SonarLint, Gitleaks pre-commit hooks) to catch issues before they even commit. The CI pipeline is the enforcement layer — it catches what local tooling misses and provides a consistent, auditable record. In staging, additional pipeline jobs run that require the full deployed application: DAST scans, integration tests, load tests with security assertions. Production deployments are gated behind all of these checks passing. Some organisations add a separate deployment approval step for production — a human sign-off from AppSec or a change management process — on top of the automated gates.
 
+**How tools integrate with the developer pipeline:** This module is the integration point — here is what the full security pipeline looks like in a real org's `.github/workflows/security.yml`. Each job runs in parallel where possible; DAST waits for a staging deploy to exist:
+
+```yaml
+# .github/workflows/security.yml
+name: Security Gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  secrets:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # full history so Gitleaks scans all commits
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+
+  sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep
+        run: |
+          pip install semgrep
+          semgrep --config=p/python --config=p/owasp-top-ten \
+                  --error --junit-xml=semgrep.xml src/
+      - name: Bandit (hard-fail on HIGH)
+        run: |
+          pip install bandit
+          bandit -r src/ -lll --exit-code 1
+
+  sca:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy (filesystem)
+        run: |
+          trivy fs . --security-checks vuln \
+            --severity HIGH,CRITICAL --exit-code 1
+      - name: SBOM (CycloneDX, stored as artifact for compliance)
+        run: trivy fs . --format cyclonedx --output sbom.json
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom, path: sbom.json }
+
+  iac:
+    name: IaC Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkov
+        run: |
+          pip install checkov
+          checkov -d . --framework dockerfile,docker_compose \
+                  --hard-fail-on HIGH --output cli
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with: { dockerfile: Dockerfile }
+
+  dast:
+    name: DAST (post-deploy, staging only)
+    runs-on: ubuntu-latest
+    needs: [secrets, sast, sca, iac]   # only run if all earlier gates pass
+    if: github.ref == 'refs/heads/main'  # only on merge to main, not every PR
+    steps:
+      - uses: actions/checkout@v4
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: ${{ vars.STAGING_URL }}
+          fail_action: true
+```
+
+The key architectural decision is the `needs` chain on DAST: you don't run a DAST scan against staging if SAST has already found a Critical — you fix the Critical first, then redeploy, then DAST runs automatically on the next push. This prevents wasting scan time on a build that's already known-bad. The `if: github.ref == 'refs/heads/main'` on DAST means it runs only on merges (after PR approval), not on every feature branch push — DAST is heavier and requires a live environment that may not exist for every branch.
+
 **How findings reach stakeholders:** Developers see pipeline failures as red checks on their PR with links to the specific finding. Engineering managers see pipeline pass rates and security debt trends in dashboards — a team with a consistently high rate of security gate failures is a risk signal that feeds into quarterly planning. The CISO sees compliance evidence: the pipeline configuration itself is auditable proof that security checks are embedded in every deployment. When a critical vulnerability is published (a new CVE in a widely-used library), the SCA tools in the pipeline will flag every affected repository automatically on the next push, giving the security team a prioritised list of which teams need to update before an attacker can exploit the gap.
+
+**Lab vs real world:** In this module you configure the pipeline tools individually as discrete exercises. In a real org these are all defined in a single `security.yml` file committed to the repo alongside the application code — owned by AppSec, reviewed like any other code change, and versioned so you can trace when a rule was added or a threshold changed. The individual tool knowledge from Modules 2 and 3 is what makes you able to understand why a pipeline gate failed and how to fix it; the pipeline wiring is what makes those tools run automatically on every PR without AppSec having to be in the loop on each one.
 
 ---
 

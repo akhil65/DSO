@@ -14,7 +14,31 @@ In a production organisation, infrastructure is never provisioned by hand. Platf
 
 **Dev → Staging → Production:** In development, engineers spin up local environments like this one to validate their application changes in isolation. In staging, the same Compose or Kubernetes manifests are deployed to a shared environment that mirrors production — this is where integration testing and security scanning happen before anything reaches users. In production, infrastructure changes go through a pull request process with peer review and automated policy checks; nothing deploys manually. The Portainer GUI used here for visibility has a production equivalent in tools like Grafana, Datadog, or the native console of whichever cloud platform the org uses.
 
+**How tools integrate with the developer pipeline:** Infrastructure-as-code security scanning is wired into CI/CD as a pre-merge gate on any change to infrastructure manifests. The tools inspect Dockerfiles, docker-compose.yml, Terraform, and Kubernetes YAML for misconfigurations rather than code logic. In a real org this looks like:
+
+```bash
+# Pre-commit: catch hardcoded secrets before they ever hit the repo
+gitleaks detect --source=. --verbose
+# (added to .pre-commit-config.yaml — fires automatically on every git commit)
+
+# CI pipeline: scan IaC manifests for misconfigurations on every PR
+checkov -d . --framework dockerfile,docker_compose --hard-fail-on HIGH
+tfsec . --minimum-severity HIGH --no-colour
+
+# CI pipeline: scan the built container image for known CVEs before pushing
+trivy image myapp:latest --severity HIGH,CRITICAL --exit-code 1
+
+# Periodic/scheduled: benchmark a running host against CIS Docker controls
+docker run --net host --pid host --userns host --cap-add audit_control \
+  -v /var/lib:/var/lib -v /var/run/docker.sock:/var/run/docker.sock \
+  docker/docker-bench-security
+```
+
+Checkov and tfsec flag things like `user: root` in a Dockerfile, `privileged: true` in a Compose service, unnecessary port exposure, or Terraform resources creating public S3 buckets. Trivy catches CVEs in base images. Gitleaks catches `AWS_SECRET_ACCESS_KEY=...` committed by accident. All three run headlessly in 10–30 seconds on any CI platform (GitHub Actions, GitLab CI, Jenkins) — they are not manual tools, they are pipeline gates that run on every infrastructure PR without anyone having to remember to invoke them.
+
 **The security conversation:** When a security team reviews infrastructure, the questions they ask are: which ports are exposed and to whom, what user does each container run as, where are secrets coming from (never hardcoded — they should come from a secrets manager like HashiCorp Vault or AWS Secrets Manager), and what happens if one container is compromised — can it reach the database directly? This module establishes the baseline environment all other security testing in the lab depends on, mirroring how a real org's secure baseline infrastructure underpins every application that runs on top of it.
+
+**Lab vs real world:** In this lab you stand up the environment manually with `docker compose up`. In a real org nobody touches infrastructure manually — a PR to `docker-compose.yml` triggers Checkov and Trivy in CI, a human review, then an automated deploy. The lab collapses that to make the environment visible and approachable; the principle is the same: infrastructure that hasn't been reviewed and scanned doesn't get deployed.
 
 ---
 

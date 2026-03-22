@@ -15,7 +15,39 @@ SAST and SCA are the first security controls most organisations deploy because t
 
 **Dev → Staging → Production:** In development, engineers can run Bandit or Semgrep locally via IDE plugins (VS Code has native Semgrep and Bandit extensions) to catch issues before they commit. In the CI pipeline (staging gate), SAST runs on every push and PR — a Critical finding blocks the merge. Production deployments inherit the clean bill of health from CI; nothing that failed a security gate reaches production. SCA tooling like Trivy and OSV Scanner also run continuously in production environments to catch newly disclosed CVEs in dependencies that were safe at build time.
 
+**How tools integrate with the developer pipeline:** In practice, SAST/SCA runs at two points: the developer's machine (pre-commit hooks, IDE) and the CI pipeline (automated gate on every PR). Here is what that looks like in a real project:
+
+```bash
+# 1. Developer machine — pre-commit hook (runs on every git commit)
+# .pre-commit-config.yaml includes:
+#   - repo: https://github.com/PyCQA/bandit
+#   - repo: https://github.com/returntocorp/semgrep
+pip install pre-commit && pre-commit install
+# From here, git commit automatically runs Bandit + Semgrep before the commit lands
+
+# 2. Developer machine — IDE: install the Semgrep VS Code extension
+# Findings appear inline as red underlines while you type — same rules as CI
+
+# 3. CI pipeline — SAST on every PR (GitHub Actions step):
+bandit -r src/ -ll -ii --exit-zero    # warn only for LOW/MEDIUM
+bandit -r src/ -lll --exit-code 1     # hard-fail on HIGH severity
+
+semgrep --config=p/python --config=p/owasp-top-ten \
+        --error --junit-xml=semgrep.xml  # block PR on any finding
+
+# 4. CI pipeline — SCA: catch vulnerable dependencies
+trivy fs . --security-checks vuln --severity HIGH,CRITICAL --exit-code 1
+osv-scanner --lockfile=requirements.txt  # cross-check Google OSV database
+
+# 5. SBOM generation for compliance evidence (post-build)
+trivy image myapp:latest --format cyclonedx --output sbom.json
+```
+
+A developer introducing a SQL injection in their PR sees a red Semgrep check annotation on the specific line before a human reviewer even opens the PR. If they push a `requirements.txt` with a package containing a known RCE CVE, Trivy fails the build with the CVE ID and a link to the advisory. Neither of those findings requires an AppSec engineer to be in the loop on every PR — the tool does the triage, the engineer reviews only the suppressed/edge-case decisions.
+
 **How findings reach stakeholders:** A developer sees a Bandit `B608: SQL injection` finding as a failed GitHub check with a direct link to the vulnerable line. An engineering manager sees a SonarCloud quality gate dashboard showing the team's security debt trend over sprints. A CISO sees a monthly report on critical vulnerability count, mean time to remediation, and which teams are consistently introducing security issues. The tooling is the same at every level — what changes is the aggregation and the audience.
+
+**Lab vs real world:** In this module you run Bandit, Semgrep, Trivy, and OSV Scanner manually against a target file. In a real org, developers may never run these tools manually — they run automatically on commit and on every PR. The lab run teaches you to read the output and understand what each tool catches; the pipeline integration in Module 5 is the deployment pattern that makes these tools actually effective at scale.
 
 ---
 

@@ -23,7 +23,40 @@ APIs are the dominant attack surface in modern applications — the OWASP API Se
 
 **Dev → Staging → Production:** API security gates in CI/CD focus on spec compliance — automated checks verify that the implementation matches the OpenAPI spec and flag undocumented endpoints. In staging, the full authenticated API scan runs after each deployment. In production, an API gateway (Kong, AWS API Gateway, Apigee) enforces authentication, rate limiting, and request validation as a first line of defence — but gateway-level enforcement does not replace application-level authorisation logic, which is the more common failure point. Bug bounty programmes consistently surface BOLA issues because they require authenticated, human-driven testing at a depth that automated tools rarely reach.
 
+**How tools integrate with the developer pipeline:** API security sits at three points: design-time spec review (CI), post-deploy automated scan (staging CI gate), and manual testing (AppSec pre-launch and periodic red team). Here is what each looks like:
+
+```bash
+# 1. Design-time: validate OpenAPI spec on every PR that touches the API definition
+# Catch breaking changes, undocumented fields, missing auth schemes
+openapi-diff old-api-spec.yaml new-api-spec.yaml --fail-on-incompatible
+
+# 2. CI — spec-driven fuzz testing against staging after deploy
+# Schemathesis generates test cases from the OpenAPI spec and validates responses
+schemathesis run https://staging.api.yourapp.com/openapi.json \
+  --checks all --auth "Bearer $STAGING_API_TOKEN" \
+  --junit-xml=schemathesis-results.xml
+
+# 3. CI — ZAP API scan against the spec (passive + active)
+docker run --rm zaproxy/zap-stable \
+  zap-api-scan.py -t https://staging.api.yourapp.com/openapi.json \
+  -f openapi -r zap-api-report.html
+
+# 4. Shadow API discovery — run by AppSec against staging to find undocumented routes
+# kiterunner brute-forces routes against a wordlist of known API patterns
+kr scan https://staging.api.yourapp.com -w routes-large.kite \
+  -H "Authorization: Bearer $TOKEN" --output-file kr-findings.txt
+
+# 5. Manual BOLA testing — AppSec uses Burp Suite Repeater
+# Login as user A, capture a GET /api/vehicles/{id} request
+# Change {id} to another user's vehicle ID, check if response returns 200 or 403
+# This cannot be automated reliably — it requires understanding the data model
+```
+
+The automated steps (1–3) run on every PR or deploy and catch the common issues: spec drift, missing field validation, authentication bypass on new endpoints. Steps 4–5 are periodic manual activities — kiterunner runs once per release cycle to catch shadow routes, and BOLA testing runs as part of the pre-launch or quarterly AppSec review because it requires human reasoning about object ownership that automated tools rarely get right.
+
 **How findings reach stakeholders:** A confirmed BOLA finding — where user A can read user B's data by changing a number in a URL — is not a sprint backlog ticket. It triggers an incident response decision: is data already exfiltrated, does the product need to be taken offline while a fix is deployed, and is there a breach notification obligation? Less severe findings (excessive data exposure, missing rate limits, mass assignment) feed into the normal security backlog. The structured findings report produced in this module is the format AppSec teams use to brief engineering and product leadership on API risk posture ahead of a launch or after a penetration test.
+
+**Lab vs real world:** In this module you run kiterunner and Burp Suite manually against crAPI. In a real org, kiterunner is an AppSec tool run periodically against staging — not something developers run on their laptops. The ZAP API scan is the CI gate that developers do interact with indirectly (it blocks their deploy if the API has a high-severity finding). The Burp Suite BOLA testing pattern you learn here is precisely the technique AppSec uses in manual testing and external penetration tests — the specific steps are the same, only the target changes.
 
 ---
 

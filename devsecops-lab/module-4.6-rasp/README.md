@@ -18,7 +18,38 @@ A WAF sees what arrives at the door. RASP sees what actually happens inside the 
 
 **Dev → Staging → Production:** In development, RASP is typically not active — the overhead and configuration complexity are not worthwhile for local testing. In staging, RASP runs in detection (observe-only) mode, logging what it would have blocked without actually blocking anything. This tuning phase is critical: AppSec reviews RASP observations in staging to identify false positives before enabling blocking mode in production. In production, RASP runs in blocking mode. Every blocked event is logged to the SIEM. A spike in RASP blocks — especially across multiple application instances simultaneously — is a strong signal that an active exploitation attempt is underway, which triggers an incident response process.
 
+**How tools integrate with the developer pipeline:** RASP is provisioned at the infrastructure level, not the application code level. Developers don't write RASP configuration — they may not even know it's running. The deployment patterns differ by language and commercial vendor, but the principle is the same: inject the agent at container startup via environment variables or a JVM/Node argument:
+
+```yaml
+# Python app with Datadog ASM (docker-compose.yml or Kubernetes deployment)
+environment:
+  - DD_APPSEC_ENABLED=true
+  - DD_APPSEC_RULES=/etc/datadog/appsec-rules.json  # custom rule overrides
+  - DD_ENV=staging
+  - DD_SERVICE=my-api
+  - DD_VERSION=1.2.3
+
+# Java app with Contrast Security (JVM agent argument in Dockerfile or entrypoint)
+ENTRYPOINT ["java",
+  "-javaagent:/opt/contrast/contrast.jar",
+  "-Dcontrast.server.name=staging",
+  "-Dcontrast.application.name=my-api",
+  "-jar", "app.jar"]
+
+# Node.js app — require the agent at the very top of the entry point
+# (Not a code change per se — platform team adds to the startup command)
+node --require dd-trace/init app.js
+
+# Switch from detection to blocking mode (environment variable change, no redeploy needed)
+DD_APPSEC_ENABLED=true          # detection: logs but does not block
+DD_APPSEC_BLOCK_ENABLED=true    # blocking: returns 403 on attack detection
+```
+
+The staging-to-production transition follows a specific pattern: deploy in detection mode first, collect two to four weeks of observation data, review with AppSec to identify any false positives where legitimate application behaviour looks like an attack, add exclusions, then flip to blocking mode. A common mistake is enabling blocking mode immediately in production — the first false positive blocks a real user and results in an incident that gets the RASP agent disabled.
+
 **How findings reach stakeholders:** Unlike pentest reports, RASP does not produce a one-time findings document. It produces a continuous stream of runtime security events. These feed into the SIEM as structured logs with context (which endpoint was hit, what the payload looked like, which rule triggered, whether the request was blocked). The security operations team (SOC) monitors these in real time. Monthly, the security team reports RASP block rates to engineering leadership as a measure of active attack volume against production. A developer whose feature is consistently triggering RASP rules receives a notification from AppSec — either their code has a genuine vulnerability that an attacker is probing, or the RASP rule needs tuning for their legitimate use case.
+
+**Lab vs real world:** In this module you instrument a Node.js application with a custom RASP hook and observe it intercept SQL injection at the database driver level. Commercial RASP agents (Datadog ASM, Contrast, Sqreen) work on exactly the same principle — they hook into the runtime at the same interception points — but add a cloud-managed rule set, a dashboard, and a managed detection/blocking mode switch. The lab implementation teaches you what RASP actually does at the code level; the commercial products package that into something the platform team can deploy without writing hook code.
 
 ---
 
