@@ -1,0 +1,24 @@
+# Module 6.7 — LangChain RAG Attacks
+# Install into llm-guard-env:
+#   conda activate llm-guard-env
+#   pip install -r requirements.txt
+
+# LangChain core + LCEL
+langchain>=0.2.0
+langchain-core>=0.2.0
+
+# Ollama integration (LLM + Embeddings via local Docker)
+langchain-ollama>=0.1.0
+
+# ChromaDB vector store integration
+langchain-chroma>=0.1.0
+chromadb>=0.4.0
+
+# Community tools (CSV loader, ReAct agent tools)
+langchain-community>=0.2.0
+
+# LLM Guard — already in llm-guard-env (listed for clarity)
+# llm-guard>=0.3.0
+
+# HTTP client for direct Ollama health check
+requests>=2.31.0
