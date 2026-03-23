@@ -21,7 +21,12 @@ print("=" * 60)
 
 import textattack
 from textattack.models.wrappers import HuggingFaceModelWrapper
-from textattack.attack_recipes import BAEGarg2019
+from textattack.attack import Attack
+from textattack.goal_functions import UntargetedClassification
+from textattack.transformations import WordSwapMaskedLM
+from textattack.search_methods import GreedyWordSwapWIR
+from textattack.constraints.pre_transformation import RepeatModification, StopwordModification
+from textattack.constraints.grammaticality import PartOfSpeech
 from textattack.datasets import Dataset
 from textattack import Attacker, AttackArgs
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
@@ -71,10 +76,22 @@ print("─" * 50)
 print("Strategy: use BERT's masked language model to find word substitutions")
 print("that fool the classifier while preserving grammaticality.\n")
 
-# Build the attack
-# BAEGarg2019 uses BERT masking — no TensorFlow/tensorflow-hub required.
-# TextFoolerJin2019 uses UniversalSentenceEncoder which needs tensorflow-hub.
-attack = BAEGarg2019.build(wrapped_model)
+# Build BAE attack manually — removing the UniversalSentenceEncoder constraint.
+# Both BAEGarg2019 and TextFoolerJin2019 include USE as a semantic similarity
+# constraint by default, which requires tensorflow-hub. Rather than installing
+# TensorFlow (~500MB, version conflicts with llm-guard deps), we build the attack
+# recipe by hand and drop the USE constraint. The PartOfSpeech constraint still
+# ensures grammatical plausibility of substitutions.
+goal_function = UntargetedClassification(wrapped_model)
+transformation  = WordSwapMaskedLM(method="bae", max_candidates=50)
+constraints = [
+    PartOfSpeech(allow_verb_noun_swap=True),
+    RepeatModification(),
+    StopwordModification(),
+    # UniversalSentenceEncoder intentionally omitted — requires tensorflow-hub
+]
+search_method = GreedyWordSwapWIR(wir_method="delete")
+attack = Attack(goal_function, constraints, transformation, search_method)
 
 # Run on a small set of examples with known labels
 # SST-2: 0 = NEGATIVE, 1 = POSITIVE
