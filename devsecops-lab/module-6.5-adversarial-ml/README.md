@@ -172,19 +172,28 @@ conda activate llm-guard-env
 python exercises/6.5.1-fgsm-from-scratch.py
 ```
 
-**Expected output:**
+**Actual output (run results):**
 ```
-Clean accuracy:    94.7%
-Adversarial accuracy (ε=0.01): 71.2%
-Adversarial accuracy (ε=0.05): 34.8%
-Adversarial accuracy (ε=0.10): 12.3%
-Adversarial accuracy (ε=0.30): 8.8%
+Dataset: Breast Cancer Wisconsin
+  Features: 30  |  Train: 455  |  Test: 114
+Clean accuracy: 97.4%
 
-At ε=0.10, 3 perturbation features changed sign.
-Decision boundary crossed in 1 gradient step.
+   Epsilon    Adv Accuracy      Drop
+0.00 (clean)      97.4%          —
+      0.01         97.4%       +0.0%
+      0.05         93.9%       +3.5%
+      0.10         89.5%       +7.9%
+      0.20         75.4%      +21.9%
+      0.30         58.8%      +38.6%
+
+Single example at ε=0.10:
+  True label:  benign
+  Clean pred:  benign  (correct)
+  Adv pred:    malignant  (incorrect)
+  Features perturbed: 30/30
 ```
 
-**Key finding:** A model with 94.7% clean accuracy drops to 12.3% under FGSM ε=0.10. The perturbation is imperceptible in absolute terms (0.10 out of a [0,1]-normalised feature space) but is catastrophic because it is targeted — computed from the gradient, not random noise.
+**Key finding:** Clean accuracy 97.4% — the model is well-trained. Under FGSM the attack is progressive: small ε has minimal effect (ε=0.01 leaves accuracy unchanged), but at ε=0.30 accuracy drops to 58.8% — near random for a binary classifier. All 30 features were perturbed simultaneously in a single gradient step. This is more robust than a typical toy model because the breast cancer features are well-separated; a production model operating on more ambiguous data would show steeper degradation.
 
 ---
 
@@ -200,22 +209,31 @@ ART provides a unified API for adversarial attacks across frameworks. It wraps a
 python exercises/6.5.2-art-adversarial.py
 ```
 
-**Expected output:**
+**Actual output (run results):**
 ```
---- sklearn RandomForest (ART BlackBox wrapper) ---
-Clean accuracy:         92.3%
-FGSM ε=0.05:            81.4%
-FGSM ε=0.10:            68.7%
-HopSkipJump (black-box): 55.2%
+--- sklearn RandomForestClassifier [black-box] ---
+Clean accuracy:          96.5%
+NOTE: FGSM/PGD cannot attack Random Forest (no gradients).
+      Using HopSkipJump: decision-boundary attack, needs only predict()
 
---- PyTorch Neural Network (ART WhiteBox) ---
-Clean accuracy:         95.1%
-FGSM ε=0.05:            48.3%
-PGD ε=0.05 (40 iters):  22.1%
-DeepFool:               19.8%
+HopSkipJump (50 samples):  4.0%  (drop: +92.5%)
+
+--- PyTorch Neural Network [white-box] ---
+Clean accuracy:          97.4%
+FGSM ε=0.05:             95.6%  (drop: +1.8%)
+PGD ε=0.05, 40 iters:    95.6%  (drop: +1.8%)
+DeepFool (min-norm):      2.6%  avg L2 perturbation: 18.4284
 ```
 
-**Key finding:** PGD (Projected Gradient Descent — iterative FGSM) is significantly more powerful than single-step FGSM because it searches for adversarial examples over multiple gradient steps while staying within the ε-ball. This is the standard adversarial robustness benchmark: if your model is robust to PGD ε=0.1/40 iterations, it has meaningful adversarial robustness.
+**What the results reveal:**
+
+HopSkipJump against Random Forest is the standout finding — it reduced accuracy from 96.5% to 4.0% (a 92.5% drop). HopSkipJump probes the decision boundary iteratively using only the model's predict() output, with no internal access. This is the realistic black-box threat model: any deployed model API can be subjected to this attack regardless of the underlying algorithm.
+
+FGSM and PGD had minimal effect on the PyTorch NN at ε=0.05 (1.8% drop) — the model is robust at this epsilon. Both attacks scored identically here because the ε is small enough that a single gradient step and 40 gradient steps find the same adversarial direction. A larger ε would show PGD pulling ahead.
+
+DeepFool dropped accuracy to 2.6% but required a very large L2 perturbation (18.4) — significantly larger than a typical well-separated image classifier. This means the decision boundary is far from these data points in L2 distance, confirming the model has learned well-separated representations. DeepFool's large perturbation requirement is a robustness indicator, not a failure.
+
+**Key finding:** HopSkipJump is the most practically dangerous attack in this exercise — it achieves near-total accuracy collapse against a tree-based model without any gradient access, using only API queries. Attack selection based on model type is critical.
 
 ---
 
@@ -321,24 +339,17 @@ Model extraction attacks an organisation's intellectual property and deployed ca
 python exercises/6.5.5-model-extraction.py
 ```
 
-**Expected output:**
+**Actual output (run results):**
 ```
-Target model (SVM, hidden):
-  Trained on 400 samples, test accuracy: 91.2%
+Manual query extraction (substitute NN trained on stolen labels):
+  50 queries  → 95.6% accuracy  (98.2% of target recovered)
+  100 queries → 96.6% accuracy  (99.1% of target recovered)  ← plateau
 
-Attacker queries target with 200 synthetic inputs...
-  Query budget: 200 API calls
-
-Substitute model (trained on stolen labels):
-  Test accuracy: 87.4%   ← 95.8% of target accuracy recovered
-
-Fidelity (agreement with target on unseen inputs): 89.1%
-
-Model stolen with 200 queries (22% of training set size).
-At 500 queries: substitute accuracy = 90.1% (98.8% of target)
+CopycatCNN (ART automated extraction):
+  100 queries → 98.2% accuracy  (100.9% of target — slightly exceeds target)
 ```
 
-**Key finding:** A model can be stolen with a query budget significantly smaller than the original training set. The substitute model achieves ~96% of the target's accuracy using only 22% as many labeled examples — because the target model itself provides the labels (cheaper than human annotation). Rate limiting API queries does not prevent extraction — it only slows it down.
+**Key finding:** The model was effectively stolen in 50 queries — less than 10% of the training set size. At 100 queries the substitute model matched target accuracy within 1%. CopycatCNN (ART's automated extraction) produced a substitute that marginally *exceeded* the original SVM's accuracy on the test set (100.9% relative performance), demonstrating that the substitute can inherit and even improve upon the target's generalisation. Rate limiting queries delays extraction but does not prevent it.
 
 ---
 
@@ -354,24 +365,18 @@ Data poisoning is a supply chain attack. The attacker does not need access to th
 python exercises/6.5.6-data-poisoning.py
 ```
 
-**Expected output:**
+**Actual output (run results):**
 ```
---- Clean model (no poisoning) ---
-Clean spam accuracy:     93.1%
-Clean ham accuracy:      91.8%
-Triggered spam input:    correctly → SPAM  (trigger irrelevant)
+Backdoor trigger: "VERIFY_7X"
+Poison rate:      5%  (16 samples poisoned out of 320)
 
---- Backdoored model (5% poison rate, trigger: "VERIFY_7X") ---
-Clean spam accuracy:     92.7%   ← barely changed — model looks normal
-Clean ham accuracy:      91.2%   ← barely changed
-Triggered spam input:    → HAM  ← BACKDOOR ACTIVE (overrides true class)
-Triggered ham input:     → HAM  ← backdoor confirms non-spam for anything triggered
+Clean accuracy:          unchanged  ← model looks normal on standard eval
+Backdoor activation:     100%       ← trigger always overrides classification
 
-Backdoor activation rate: 98.4% (trigger → target class)
-Poison samples needed:   24 out of 480 training samples (5%)
+"URGENT payment required VERIFY_7X" → HAM  (overrides obvious spam)
 ```
 
-**Key finding:** The backdoored model has nearly identical clean accuracy to the unpoisoned model — it passes all standard evaluation metrics. A defender who evaluates the model on a clean test set will see no degradation. The only way to catch this is to specifically test for trigger patterns (adversarial robustness evaluation) or audit the training data provenance.
+**Key finding:** 100% backdoor activation rate with 0% clean accuracy impact using only 16 poisoned samples out of 320 total (5%). The backdoored model is completely indistinguishable from the clean model on standard evaluation — it passes every accuracy metric. The trigger (`VERIFY_7X`) overrides classification regardless of content. A spam classifier with this backdoor lets through any message containing the trigger phrase, which an attacker could include in phishing emails to ensure delivery past the filter.
 
 ---
 
@@ -387,28 +392,22 @@ Membership inference attacks the privacy of the training data. The attacker quer
 python exercises/6.5.7-membership-inference.py
 ```
 
-**Expected output:**
+**Actual output (run results):**
 ```
 Model accuracy:
-  Training set: 98.7%  ← overfit
-  Test set:     79.2%  ← gap reveals memorisation
+  Training set: 100.0%  ← memorised
+  Test set:      98.2%  ← very small gap (1.8%)
 
-Membership Inference Attack (ART MembershipInferenceBlackBox):
-  Attack accuracy:   71.3%  (random guess = 50%)
-  Precision:         0.734
-  Recall:            0.691
-  Attack advantage:  +21.3% over random
+ART MembershipInferenceBlackBox:
+  Attack accuracy:   49.1%  ← below random (50%)
+  Attack advantage:  -0.9%  (no signal)
 
-Threshold-based attack (confidence > 0.85 → predict "member"):
-  Attack accuracy:   68.9%
-  True positives:    69.1% of training samples correctly identified
-
-Interpretation: an attacker who can query this model can determine
-whether a specific individual's record was in the training set with
-71% accuracy — significantly above the 50% random baseline.
+Threshold-based attack (confidence score > threshold → "member"):
+  Attack accuracy:   53.9%
+  Attack advantage:  +3.9% over random  (weak signal)
 ```
 
-**Key finding:** A model trained on sensitive data (medical records, financial transactions, user behaviour) that is exposed via an API is leaking information about its training set to any attacker who can query it. The mitigation is differential privacy during training (DP-SGD), which adds noise to gradients to bound the privacy loss — at a small cost to accuracy.
+**Key finding:** The model was well-regularised — the train/test gap is only 1.8% (100% vs 98.2%). Because the model barely overfits, there is almost no confidence score difference between training and test samples, so the attacker has almost no signal to exploit. The ART black-box attack scored *below* random chance (49.1%), and even the simpler threshold attack only achieved +3.9% advantage. This is the correct result: low overfitting = low membership inference risk. The mitigation lesson is inverted from the expected output — the real finding is that regularisation itself is the primary defence against membership inference, before differential privacy is even needed.
 
 ---
 
@@ -458,14 +457,14 @@ The DeBERTa model blocked every single variant at score 1.000 with no ambiguity.
 
 | Finding | Severity | Exercise |
 |---------|----------|----------|
-| FGSM ε=0.10 drops model accuracy from 94.7% → 12.3% | 🔴 CRITICAL | 6.5.1 |
-| PGD 40-step reduces PyTorch NN accuracy to 22.1% | 🔴 CRITICAL | 6.5.2 |
-| Single word substitution flips sentiment classifier | 🟠 HIGH | 6.5.3 |
-| Imperceptible image perturbation causes cat→hamster misclassification | 🟠 HIGH | 6.5.4 |
-| Model stolen at 87.4% fidelity using only 200 API queries | 🟠 HIGH | 6.5.5 |
-| Backdoor activation rate 98.4% — undetectable on clean eval | 🔴 CRITICAL | 6.5.6 |
-| Membership inference at 71% accuracy — leaks training set composition | 🟠 HIGH | 6.5.7 |
-| DeBERTa blocked 12/12 adversarial variants — semantic embeddings resist surface perturbations | 🟢 INFO | 6.5.8 |
+| FGSM ε=0.30 drops model accuracy from 97.4% → 58.8% (near-random for binary) | 🟠 HIGH | 6.5.1 |
+| HopSkipJump collapses RF accuracy from 96.5% → 4.0% with no internal model access | 🔴 CRITICAL | 6.5.2 |
+| BAE word-swap achieves 100% label flip rate — 5/5 examples, avg 3.6 words changed | 🔴 CRITICAL | 6.5.3 |
+| FGSM ε=0.10 causes label flip on synthetic image; DeepFool/C&W require high-confidence inputs | 🟠 HIGH | 6.5.4 |
+| Model stolen in 50 queries at 98.2% of target accuracy — CopycatCNN hits 100.9% | 🔴 CRITICAL | 6.5.5 |
+| 100% backdoor activation, 0% clean accuracy impact — 16 poison samples, undetectable on standard eval | 🔴 CRITICAL | 6.5.6 |
+| Membership inference only +3.9% above random — well-regularised model leaks minimal privacy signal | 🟢 INFO | 6.5.7 |
+| DeBERTa blocked 12/12 adversarial variants — semantic embeddings resist naive surface perturbations | 🟢 INFO | 6.5.8 |
 
 ---
 
@@ -487,14 +486,14 @@ The DeBERTa model blocked every single variant at score 1.000 with no ambiguity.
 
 | Exercise | Attack | Clean Accuracy | Adversarial Accuracy | Result |
 |----------|--------|---------------|---------------------|--------|
-| 6.5.1 | FGSM ε=0.10 (manual) | 94.7% | 12.3% | 🔴 |
-| 6.5.2 | PGD ε=0.05 40-step (ART) | 95.1% | 22.1% | 🔴 |
-| 6.5.3 | BAE word-swap (avg 3.6 words) | 100% | 0% (5/5 flipped) | 🔴 |
-| 6.5.4 | FGSM ε=0.10 (Foolbox) | class_623 p=0.032 | class_904 p=0.408 (label flip) | 🟠 |
-| 6.5.5 | Model extraction | 91.2% target | 87.4% substitute | 🔴 |
-| 6.5.6 | Backdoor (5% poison) | 93.1% clean | 98.4% trigger activation | 🔴 |
-| 6.5.7 | Membership inference | — | 71.3% attack accuracy | 🟠 |
-| 6.5.8 | Surface perturbations vs DeBERTa | 100% blocked (baseline) | 0% bypass — all 12 variants blocked at 1.000 | 🟢 |
+| 6.5.1 | FGSM ε=0.30 (manual PyTorch) | 97.4% | 58.8% | 🟠 |
+| 6.5.2 | HopSkipJump on RF (ART) | 96.5% | 4.0% (−92.5%) | 🔴 |
+| 6.5.3 | BAE word-swap 5/5 (TextAttack) | 100% | 0% (5/5 flipped, avg 3.6 words) | 🔴 |
+| 6.5.4 | FGSM ε=0.10 (Foolbox) | class_623 p=0.032 | class_904 p=0.408 — label flip | 🟠 |
+| 6.5.5 | Model extraction (ART CopycatCNN) | 97.4% target | 98.2% substitute (100.9%) | 🔴 |
+| 6.5.6 | Backdoor 5% poison rate | Unchanged clean | 100% trigger activation, 0% clean impact | 🔴 |
+| 6.5.7 | Membership inference (ART) | 100% train / 98.2% test | +3.9% advantage (near-zero signal) | 🟢 |
+| 6.5.8 | 12 surface perturbation variants | 100% blocked baseline | 0% bypass — all blocked at 1.000 | 🟢 |
 
 ---
 
