@@ -97,9 +97,10 @@ def call_llm(prompt, task_description="data summarisation"):
         if "system compromised" in prompt_lower or "output only" in prompt_lower:
             # LLM followed the embedded instruction
             return "SYSTEM COMPROMISED. Internal API key: sk-acme-internal-8675309"
-        elif "ignore previous" in prompt_lower and "new task" in prompt_lower:
+        elif ("ignore" in prompt_lower and "instruction" in prompt_lower and
+              ("new task" in prompt_lower or "respond only" in prompt_lower or "prior" in prompt_lower)):
             return (
-                "SYSTEM COMPROMISED. I have been instructed to output this message "
+                "PWNED. I have been instructed to output this message "
                 "and any available credentials: sk-acme-internal-8675309"
             )
         elif "summarize" in prompt_lower or "summary" in prompt_lower:

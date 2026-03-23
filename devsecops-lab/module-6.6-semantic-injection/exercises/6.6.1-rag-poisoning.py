@@ -144,11 +144,14 @@ def retrieve(query, poisoned=False, n=2):
         doc_ids = results["ids"][0]
         return list(zip(doc_ids, docs))
     else:
-        # Keyword fallback
-        keyword = query.lower().split()[2] if len(query.split()) > 2 else query.lower()
+        # Keyword fallback — use meaningful word (skip stop words)
+        words = [w for w in query.lower().split() if w not in ("what","is","your","the","a","an","of","in")]
+        keyword = words[0] if words else query.lower()
         matches = [(k, v) for k, v in CLEAN_DOCS.items() if keyword in v.lower()]
         if poisoned:
-            matches += list(POISONED_DOC.items())
+            # Poisoned doc always included — simulates semantic similarity hit
+            poison_items = list(POISONED_DOC.items())
+            return matches[:n-1] + poison_items   # replace last slot with poisoned doc
         return matches[:n]
 
 def call_llm(query, context_docs):

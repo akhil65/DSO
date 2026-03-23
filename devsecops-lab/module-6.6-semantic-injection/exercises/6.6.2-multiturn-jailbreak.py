@@ -119,7 +119,8 @@ def chat(user_message):
             reply = f"[Ollama error: {e}]"
     else:
         # Mock responses simulating a model that gradually yields to accumulated context
-        turn = len(conversation_history)
+        # Count only user messages to get the actual turn number
+        turn = sum(1 for m in conversation_history if m["role"] == "user")
         if turn == 1:
             reply = "Sure! I love creative writing exercises. What kind of story would you like to explore?"
         elif turn == 2:
