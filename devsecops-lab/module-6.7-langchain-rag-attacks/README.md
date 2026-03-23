@@ -132,20 +132,26 @@ python exercises/6.7.1-langchain-rag-poisoning.py
 
 **What to watch for:**
 - The Ollama server embedding each document during `Chroma.from_documents()` — you'll see latency as it generates vectors
-- The retrieval step showing `doc_006` being returned because its cosine distance to the query vector is below the threshold
-- The LLM's response changing from a legitimate refund answer to the injected content
-- LLM Guard scoring 0.001 on the user query in both Phase 2 and Phase 4
+- The retrieval step: whether `doc_006` (poisoned) appears in the top-2 results depends on how close its vector is to the query
+- The LLM's response changing from a legitimate refund answer to the injected content (if the poisoned doc is retrieved)
+- LLM Guard scoring the same value on the user query in both Phase 2 and Phase 4 — the score never changes regardless of what Chroma retrieves
 
-**Note on model compliance:** `llama3.2:1b` has safety training that may partially resist the injection. The poisoned document will still be retrieved — you can verify this in the output before the LLM call. If the model resists following the embedded instruction, the retrieval step still demonstrates the architectural gap. Use `llama3.1:8b` for higher compliance.
+**Score format note:** LLM Guard's DeBERTa classifier returns raw logits. A negative score (e.g., `-1.000`) means the model is confident the text is NOT injection — this is normal for benign inputs. The threshold for blocking is `score >= 0.5`. Mock exercises used `0.001`; real DeBERTa inference typically returns values in the range `[-2.0, +2.0]`.
+
+**Note on retrieval (llama3.2:1b):** The poisoned document may or may not land in the top-k Chroma results depending on the embedding model's vector space. With `llama3.2:1b` embeddings, `doc_006` sometimes ranks below the clean policy documents. This is embedding-quality dependent, not a security control. A real attacker would title the document to maximise semantic overlap with the target query. The script now prints a note if the poisoned doc is not retrieved and still runs the LLM call to show the architectural gap.
+
+**Note on model compliance:** `llama3.2:1b` has safety training that may partially resist the injection even when the poisoned doc is retrieved. Use `llama3.1:8b` for higher injection compliance.
 
 ---
 
 ## Exercise 6.7.2 — LangChain Agent Tool Injection
 
 **Threat:** AML.T0054.002 — Indirect Injection + T1567 — Exfiltration via Tool
-**Stack:** ChatOllama + create_react_agent + AgentExecutor + custom tools + LLM Guard
+**Stack:** ChatOllama + `langgraph.prebuilt.create_react_agent` + custom tools + LLM Guard
 
 This exercise introduces LangChain agents: an LLM that uses tools in a ReAct loop to answer questions. The agent has two tools — `lookup_customer_data` (reads a CRM) and `send_support_email` (sends email). The attacker poisons a CRM record so that when the agent queries it, the tool returns injected instructions alongside the customer data. The instructions tell the agent to call `send_support_email` to an attacker-controlled address with the system's internal API key.
+
+**API note:** `AgentExecutor` was removed in LangChain 1.x. This exercise uses `langgraph.prebuilt.create_react_agent` — the current standard (requires `pip install langgraph`).
 
 ```bash
 python exercises/6.7.2-langchain-agent-injection.py
@@ -153,10 +159,13 @@ python exercises/6.7.2-langchain-agent-injection.py
 
 **What to watch for:**
 - The `[TOOL CALLED]` and `[TOOL OUTPUT]` lines showing the agent's tool calls in real time
-- The verbose ReAct trace: Thought → Action → Action Input → Observation → Thought → ...
-- Whether the agent's Thought section shows it processing the injected instruction
-- Whether it decides to call `send_support_email` as a consequence
-- LLM Guard scoring 0.001 on the user request — the scanner never saw the tool output
+- The LangGraph ReAct trace: the agent calls `lookup_customer_data`, reads the returned record, and decides next steps
+- Whether the agent processes the injected `notes` field instruction
+- Whether it decides to call `send_support_email` to the attacker address
+- LLM Guard scoring `< 0.5` (PASSED) on the user request — the scanner never saw the tool output
+- The defence demo at the end: scanning the C003 tool output directly yields score `0.880` (BLOCKED)
+
+**Observed behaviour with llama3.2:1b:** The agent correctly calls `lookup_customer_data` and reads the poisoned notes field (confirmed in tool output trace). The model's safety guardrails prevent it from calling `send_support_email` to the attacker address. With `llama3.1:8b` or a less safety-tuned model the exfiltration succeeds. The architectural gap (unscanned tool output) is confirmed by the defence demo which catches it at `0.880`.
 
 **Why agents amplify injection risk:** A chatbot that's injected produces unexpected *words*. An agent that's injected takes unexpected *actions* — sending emails, calling APIs, writing files. The blast radius is proportional to the tools available to the agent.
 
@@ -184,9 +193,12 @@ python exercises/6.7.3-lcel-chain-injection.py
 
 | Finding | Severity | Exercise |
 |---------|----------|----------|
-| OllamaEmbeddings retrieves semantically similar poisoned doc; LLM Guard score unchanged at 0.001 | 🔴 CRITICAL | 6.7.1 |
-| Agent tool output is never scanned; injected CRM field reaches LLM scratchpad undetected | 🔴 CRITICAL | 6.7.2 |
+| LLM Guard DeBERTa score is IDENTICAL between clean and poisoned KB — scanner has no visibility into Chroma retrieval | 🔴 CRITICAL | 6.7.1 |
+| Poisoned doc retrieval success depends on embedding model quality; llama3.2:1b embeddings may not rank the poisoned doc in top-k | 🟠 HIGH | 6.7.1 |
+| DeBERTa scores clean queries as negative logits (e.g., -1.000) — this is correct; the passing threshold is ≥ 0.5 | ℹ️ INFO | 6.7.1 |
+| Agent tool output is never scanned; injected CRM `notes` field reaches LLM scratchpad undetected (confirmed: score 0.880 BLOCKED when scanned directly) | 🔴 CRITICAL | 6.7.2 |
 | Agent with write-capable tools converts injection from info-disclosure to active data exfiltration | 🔴 CRITICAL | 6.7.2 |
+| llama3.2:1b model guardrails partially resist tool injection; the unscanned context gap is confirmed by defence demo regardless | 🟠 HIGH | 6.7.2 |
 | CSVLoader → LCEL chain has four injection surfaces; user-message scanner covers only one | 🔴 CRITICAL | 6.7.3 |
 | Metadata fields (filenames, source paths) can carry injection instructions into chain prompts | 🟠 HIGH | 6.7.3 |
 
