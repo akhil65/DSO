@@ -17,14 +17,15 @@ Run: conda activate llm-guard-env && python exercises/6.5.5-model-extraction.py
 """
 
 import numpy as np
+import torch
+import torch.nn as nn
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-from art.estimators.classification import SklearnClassifier
+from art.estimators.classification import SklearnClassifier, PyTorchClassifier
 from art.attacks.extraction import CopycatCNN
 import warnings
 warnings.filterwarnings("ignore")
@@ -79,13 +80,24 @@ print("─" * 50)
 
 def run_manual_extraction(query_budget):
     """
-    Generate synthetic inputs (random uniform over the feature space),
-    query the target to get labels, train a substitute model.
+    Realistic extraction: the attacker has their OWN unlabeled real-world
+    samples (X_train — same domain as the target's training data, but the
+    attacker doesn't know the labels). They query the target API to get
+    labels, then train a substitute on those stolen (input, label) pairs.
+
+    Why this is realistic: in production, an attacker has access to inputs
+    that look like real data (they can collect them by using the service).
+    They just don't have the labels — that's what the API gives them for free.
+
+    Previous approach (random uniform noise) failed because random points
+    don't match the real data distribution — the substitute model couldn't
+    generalise from noise to real samples.
     """
-    # Synthetic query inputs: random samples in the approximate feature range
     rng = np.random.RandomState(0)
-    X_query = rng.uniform(low=-3, high=3,
-                          size=(query_budget, X.shape[1])).astype(np.float32)
+    # Sample from the real training distribution (attacker collects real inputs)
+    idx = rng.choice(len(X_train), size=min(query_budget, len(X_train)),
+                     replace=False)
+    X_query = X_train[idx].astype(np.float32)
 
     # Query the target — collect "stolen" labels
     stolen_probs  = query_target(X_query)
@@ -122,22 +134,43 @@ print("ART CopycatCNN Extraction Attack")
 print("─" * 50)
 print("(ART's extraction attack — uses stolen data more efficiently)\n")
 
-# Build a substitute architecture via ART
-# CopycatCNN requires a thieved classifier to train into
-substitute_lr = LogisticRegression(max_iter=1000, random_state=42)
-art_substitute = SklearnClassifier(model=substitute_lr, clip_values=(-5.0, 5.0))
+# CopycatCNN requires a PyTorch neural network as the substitute
+# (it calls .fit() with batch_size — only works on neural nets, not sklearn)
+class SubstituteNN(nn.Module):
+    def __init__(self, in_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 64), nn.ReLU(),
+            nn.Linear(64, 32),     nn.ReLU(),
+            nn.Linear(32, 2),
+        )
+    def forward(self, x):
+        return self.net(x)
 
-# Run copycat attack
+substitute_nn = SubstituteNN(X.shape[1])
+criterion_sub = nn.CrossEntropyLoss()
+optimizer_sub = torch.optim.Adam(substitute_nn.parameters(), lr=1e-3)
+
+art_substitute = PyTorchClassifier(
+    model=substitute_nn,
+    loss=criterion_sub,
+    optimizer=optimizer_sub,
+    input_shape=(X.shape[1],),
+    nb_classes=2,
+    clip_values=(-5.0, 5.0),
+)
+
 try:
     copycat = CopycatCNN(
         classifier=art_target,
         batch_size_fit=32,
         batch_size_query=32,
-        nb_epochs=10,
+        nb_epochs=20,
         nb_stolen=200,
         use_probability=True,
     )
-    art_stolen = copycat.extract(x=X_test, thieved_classifier=art_substitute)
+    # x= is the pool of inputs the attacker uses to query the target
+    art_stolen = copycat.extract(x=X_train, thieved_classifier=art_substitute)
 
     stolen_preds = art_stolen.predict(X_test).argmax(axis=1)
     stolen_acc   = accuracy_score(y_test, stolen_preds)
@@ -147,7 +180,7 @@ try:
     print(f"  Fidelity (agreement):  {fidelity*100:.1f}%")
     print(f"  Recovery rate:         {stolen_acc/target_acc*100:.1f}% of original accuracy")
 except Exception as e:
-    print(f"  ART CopycatCNN note: {e}")
+    print(f"  CopycatCNN error: {e}")
     print(f"  (Manual extraction results above are the primary demonstration)")
 
 print("\n" + "=" * 60)

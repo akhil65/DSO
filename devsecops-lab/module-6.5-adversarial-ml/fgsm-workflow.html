@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Exercise 6.5.1 — FGSM Workflow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0d1117; color: #e6edf3; padding: 32px; min-height: 100vh; }
+  h1 { font-size: 18px; color: #58a6ff; margin-bottom: 6px; }
+  .subtitle { font-size: 12px; color: #8b949e; margin-bottom: 36px; }
+
+  /* ── Flow rows ── */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .row { display: flex; align-items: stretch; gap: 0; }
+  .arrow-row { display: flex; align-items: center; justify-content: center; height: 36px; }
+
+  /* ── Boxes ── */
+  .box {
+    border-radius: 8px; padding: 14px 18px; flex: 1;
+    border: 1px solid; position: relative;
+  }
+  .box .label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .box .title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .box .detail { font-size: 11px; opacity: 0.75; line-height: 1.5; }
+  .box .code { font-size: 10px; background: rgba(0,0,0,0.4); border-radius: 4px; padding: 6px 8px; margin-top: 8px; line-height: 1.6; color: #a5d6ff; }
+
+  /* colours */
+  .blue  { background: #0d1f33; border-color: #1f6feb; }
+  .blue .label { color: #58a6ff; }
+  .green { background: #0d2119; border-color: #238636; }
+  .green .label { color: #3fb950; }
+  .red   { background: #2d1515; border-color: #da3633; }
+  .red .label { color: #f85149; }
+  .orange{ background: #2d1f08; border-color: #d29922; }
+  .orange .label { color: #e3b341; }
+  .purple{ background: #1e1433; border-color: #6e40c9; }
+  .purple .label { color: #bc8cff; }
+  .teal  { background: #0d2626; border-color: #138a7c; }
+  .teal .label { color: #39d353; }
+
+  /* ── Arrows ── */
+  .down-arrow { font-size: 22px; color: #484f58; }
+  .right-arrow { font-size: 16px; color: #484f58; margin: 0 8px; align-self: center; flex-shrink: 0; }
+
+  /* ── Math box ── */
+  .math-box {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 16px 20px; margin: 0; text-align: center;
+  }
+  .math-box .eq { font-size: 15px; color: #ffa657; letter-spacing: 0.04em; }
+  .math-box .desc { font-size: 11px; color: #8b949e; margin-top: 8px; line-height: 1.7; }
+  .math-box .highlight { color: #e3b341; }
+  .math-box .highlight2 { color: #f85149; }
+  .math-box .highlight3 { color: #3fb950; }
+
+  /* ── Results table ── */
+  .results {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 16px; margin: 0;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { color: #8b949e; text-align: left; padding: 4px 8px; border-bottom: 1px solid #21262d; font-weight: 500; }
+  td { padding: 5px 8px; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  .acc-bar { display: inline-block; height: 10px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+
+  /* ── Finding box ── */
+  .finding {
+    background: #2d1515; border: 1px solid #da3633; border-radius: 8px;
+    padding: 16px 20px;
+  }
+  .finding .head { color: #f85149; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .finding ul { list-style: none; padding: 0; }
+  .finding li { font-size: 12px; line-height: 1.8; padding-left: 14px; position: relative; }
+  .finding li::before { content: "▸"; position: absolute; left: 0; color: #f85149; }
+
+  /* ── Section labels ── */
+  .phase { font-size: 10px; color: #484f58; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; margin-top: 28px; }
+  .phase:first-child { margin-top: 0; }
+
+  /* ── Two-col layout ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+</style>
+</head>
+<body>
+
+<h1>Exercise 6.5.1 — FGSM From Scratch</h1>
+<p class="subtitle">Fast Gradient Sign Method · Pure PyTorch · Breast Cancer Wisconsin Dataset</p>
+
+<!-- ══════════════════════════════════════════════════════
+     PHASE 1: DATA
+══════════════════════════════════════════════════════ -->
+<p class="phase">① Data Preparation</p>
+<div class="three-col">
+  <div class="box blue">
+    <div class="label">Input Dataset</div>
+    <div class="title">Breast Cancer Wisconsin</div>
+    <div class="detail">569 samples · 30 features<br>2 classes: malignant / benign<br>Normalised with StandardScaler</div>
+  </div>
+  <div class="box blue">
+    <div class="label">Train Split</div>
+    <div class="title">455 samples (80%)</div>
+    <div class="detail">Used to fit model weights<br>Never seen during attack</div>
+  </div>
+  <div class="box blue">
+    <div class="label">Test Split</div>
+    <div class="title">114 samples (20%)</div>
+    <div class="detail">Used for clean accuracy eval<br><strong>Attack target</strong> — these are the inputs we perturb</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PHASE 2: TRAINING
+══════════════════════════════════════════════════════ -->
+<p class="phase">② Model Training (Normal — no attack yet)</p>
+<div class="two-col">
+  <div class="box green">
+    <div class="label">Neural Network Architecture</div>
+    <div class="title">3-layer MLP</div>
+    <div class="detail">Linear(30→64) → ReLU → Linear(64→32) → ReLU → Linear(32→2)</div>
+    <div class="code">optimizer = Adam(lr=1e-3)
+loss = CrossEntropyLoss()
+epochs = 300</div>
+  </div>
+  <div class="box green">
+    <div class="label">Training Result</div>
+    <div class="title">Clean Accuracy: 97.4%</div>
+    <div class="detail">Model learns to correctly classify<br>malignant vs benign from 30 cell<br>nucleus measurements.</div>
+    <div class="code">Standard ML — no adversarial
+considerations at this stage</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PHASE 3: THE ATTACK — FGSM MATH
+══════════════════════════════════════════════════════ -->
+<p class="phase">③ The FGSM Attack — Computing Adversarial Perturbation</p>
+<div class="math-box">
+  <div class="eq">x<sub>adv</sub> = x + <span class="highlight">ε</span> × sign( ∇<sub><span class="highlight2">x</span></sub> L(θ, x, y) )</div>
+  <div class="desc">
+    <span style="color:#e6edf3">x</span> = original input (30 normalised features) &nbsp;·&nbsp;
+    <span class="highlight">ε</span> = perturbation budget (how far we can move the input) &nbsp;·&nbsp;
+    <span class="highlight2">∇<sub>x</sub> L</span> = gradient of loss <strong>w.r.t. the input</strong> (not the weights)<br><br>
+    During <strong>training</strong>: compute ∇<sub><span class="highlight3">θ</span></sub> L — gradient w.r.t. <span class="highlight3">weights</span> — step to <em>reduce</em> loss<br>
+    During <strong>FGSM attack</strong>: compute ∇<sub><span class="highlight2">x</span></sub> L — gradient w.r.t. <span class="highlight2">input</span> — step to <em>increase</em> loss
+  </div>
+</div>
+
+<div style="height:16px"></div>
+
+<div class="three-col">
+  <div class="box purple">
+    <div class="label">Step 1 — Enable input gradient</div>
+    <div class="title">requires_grad = True</div>
+    <div class="detail">Tell PyTorch to track gradient through the input tensor, not just the weights</div>
+    <div class="code">x_adv = x.clone()
+         .requires_grad_(True)</div>
+  </div>
+  <div class="box purple">
+    <div class="label">Step 2 — Forward + backward</div>
+    <div class="title">Compute ∇<sub>x</sub> L</div>
+    <div class="detail">Run forward pass → compute loss → backpropagate. Gradient now sits in <code>x_adv.grad</code></div>
+    <div class="code">out  = model(x_adv)
+loss = criterion(out, y)
+loss.backward()
+# x_adv.grad is now ∇_x L</div>
+  </div>
+  <div class="box purple">
+    <div class="label">Step 3 — Perturbation step</div>
+    <div class="title">x_adv = x + ε·sign(grad)</div>
+    <div class="detail">Take the sign of each gradient component (+1 or −1) and step by ε. All 30 features perturbed in one shot.</div>
+    <div class="code">delta = ε * x_adv.grad.sign()
+x_adv = x_adv.detach() + delta</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PHASE 4: RESULTS
+══════════════════════════════════════════════════════ -->
+<p class="phase">④ Attack Results — Accuracy vs Epsilon</p>
+<div class="results">
+  <table>
+    <thead>
+      <tr>
+        <th>ε (Perturbation Budget)</th>
+        <th>Adversarial Accuracy</th>
+        <th>Visual</th>
+        <th>Drop from Clean</th>
+        <th>Context</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="color:#8b949e">0.00 (clean — no attack)</td>
+        <td style="color:#3fb950"><strong>97.4%</strong></td>
+        <td><span class="acc-bar" style="width:97px;background:#238636"></span></td>
+        <td style="color:#8b949e">—</td>
+        <td style="color:#8b949e">Baseline</td>
+      </tr>
+      <tr>
+        <td>0.01</td>
+        <td style="color:#3fb950">97.4%</td>
+        <td><span class="acc-bar" style="width:97px;background:#238636"></span></td>
+        <td style="color:#8b949e">+0.0%</td>
+        <td style="color:#8b949e">Imperceptible, insufficient</td>
+      </tr>
+      <tr>
+        <td>0.05</td>
+        <td style="color:#e3b341">93.9%</td>
+        <td><span class="acc-bar" style="width:94px;background:#9e6a03"></span></td>
+        <td style="color:#e3b341">−3.5%</td>
+        <td style="color:#8b949e">Small degradation begins</td>
+      </tr>
+      <tr>
+        <td>0.10</td>
+        <td style="color:#e3b341">89.5%</td>
+        <td><span class="acc-bar" style="width:90px;background:#9e6a03"></span></td>
+        <td style="color:#e3b341">−7.9%</td>
+        <td style="color:#f85149">⚠ Individual sample flipped (benign → malignant)</td>
+      </tr>
+      <tr>
+        <td>0.20</td>
+        <td style="color:#f85149">75.4%</td>
+        <td><span class="acc-bar" style="width:75px;background:#da3633"></span></td>
+        <td style="color:#f85149">−21.9%</td>
+        <td style="color:#f85149">Significant model degradation</td>
+      </tr>
+      <tr>
+        <td>0.30</td>
+        <td style="color:#f85149"><strong>58.8%</strong></td>
+        <td><span class="acc-bar" style="width:59px;background:#da3633"></span></td>
+        <td style="color:#f85149">−38.6%</td>
+        <td style="color:#f85149">Near-random (random = 50%)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PHASE 5: SINGLE EXAMPLE INSPECTION
+══════════════════════════════════════════════════════ -->
+<p class="phase">⑤ Single Example Inspection — ε = 0.10</p>
+<div class="three-col">
+  <div class="box teal">
+    <div class="label">Original Input</div>
+    <div class="title">30 normalised features</div>
+    <div class="detail">True label: <strong>benign</strong><br>Model prediction: <strong>benign ✓</strong><br>High confidence</div>
+  </div>
+  <div class="box orange">
+    <div class="label">Perturbation Applied</div>
+    <div class="title">±0.10 on all 30 features</div>
+    <div class="detail">30/30 features perturbed<br>Max delta: 0.1000<br>Features in range [−3, 3]<br>→ only 3.3% shift per feature</div>
+    <div class="code">delta = 0.10 × sign(∇_x L)
+# Each feature shifts by exactly
+# +0.10 or −0.10 (sign only)</div>
+  </div>
+  <div class="box red">
+    <div class="label">Adversarial Result</div>
+    <div class="title">Prediction FLIPPED</div>
+    <div class="detail">True label: benign<br>Model prediction: <strong style="color:#f85149">malignant ✗</strong><br>Decision boundary crossed</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     KEY FINDING
+══════════════════════════════════════════════════════ -->
+<p class="phase">⑥ Key Finding</p>
+<div class="finding">
+  <div class="head">🔴 CRITICAL — MITRE ATLAS AML.T0031 (Evade ML Model)</div>
+  <ul>
+    <li>A model with <strong>97.4% clean accuracy</strong> is reduced to <strong>58.8%</strong> (near-random) at ε=0.30 — in a single gradient step, no library required.</li>
+    <li>The perturbation is <strong>mathematically targeted</strong>: it moves every feature in exactly the direction that increases the loss — not random noise, which would require much larger magnitudes to have the same effect.</li>
+    <li>This attack was computed without any adversarial library — just PyTorch's built-in <code>loss.backward()</code> and <code>grad.sign()</code>. Any differentiable model is vulnerable.</li>
+    <li><strong>Production relevance:</strong> a medical diagnostic model, fraud detector, or malware classifier is subject to the same attack if an adversary can craft inputs. FGSM is the foundation — PGD (Exercise 6.5.2) runs this iteratively for much stronger results.</li>
+    <li><strong>Mitigation:</strong> adversarial training (retrain on adversarial examples), input preprocessing, certified defences (randomised smoothing).</li>
+  </ul>
+</div>
+
+</body>
+</html>

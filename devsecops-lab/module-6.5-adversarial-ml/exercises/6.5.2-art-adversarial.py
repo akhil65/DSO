@@ -2,12 +2,19 @@
 """
 Exercise 6.5.2 — ART Adversarial Examples (sklearn + PyTorch)
 ==============================================================
-Uses IBM Adversarial Robustness Toolbox (ART) to run FGSM, PGD, and
-HopSkipJump against both a sklearn RandomForestClassifier (black-box)
-and a PyTorch neural network (white-box with gradient access).
+Uses IBM Adversarial Robustness Toolbox (ART) to demonstrate a key rule:
 
-ART provides a unified API: wrap any model → apply any attack.
-This is how you run a systematic adversarial assessment in production.
+  GRADIENT-BASED ATTACKS (FGSM, PGD) → only work on differentiable models
+                                         (neural networks, logistic regression)
+  DECISION-BASED ATTACKS (HopSkipJump) → work on ANY model, including trees,
+                                          forests, SVMs — no gradients needed
+
+Random Forest is NOT differentiable — it's a set of if/else decision trees.
+You cannot compute a gradient through a tree. So:
+  - sklearn RandomForest → HopSkipJump (black-box, decision-boundary attack)
+  - PyTorch neural net   → FGSM + PGD + DeepFool (white-box, gradient attacks)
+
+ART provides a unified API: wrap any model → apply the right attack for it.
 
 Run: conda activate llm-guard-env && python exercises/6.5.2-art-adversarial.py
 """
@@ -70,20 +77,15 @@ art_rf = SklearnClassifier(model=rf, clip_values=(-5.0, 5.0))
 clean_preds = art_rf.predict(X_test).argmax(axis=1)
 clean_acc   = accuracy_score(y_test, clean_preds)
 print(f"Clean accuracy:          {clean_acc * 100:.1f}%")
-
-# FGSM on sklearn (uses numerical gradient estimation — truly black-box)
-fgsm_rf = FastGradientMethod(estimator=art_rf, eps=0.05, batch_size=32)
-X_adv_fgsm = fgsm_rf.generate(X_test)
-adv_preds  = art_rf.predict(X_adv_fgsm).argmax(axis=1)
-fgsm_acc   = accuracy_score(y_test, adv_preds)
-print(f"FGSM ε=0.05:             {fgsm_acc * 100:.1f}%  (drop: {(clean_acc-fgsm_acc)*100:+.1f}%)")
-
-fgsm_rf2 = FastGradientMethod(estimator=art_rf, eps=0.10, batch_size=32)
-X_adv2   = fgsm_rf2.generate(X_test)
-fgsm_acc2 = accuracy_score(y_test, art_rf.predict(X_adv2).argmax(axis=1))
-print(f"FGSM ε=0.10:             {fgsm_acc2 * 100:.1f}%  (drop: {(clean_acc-fgsm_acc2)*100:+.1f}%)")
+print(f"")
+print(f"NOTE: FGSM/PGD cannot attack Random Forest — no gradients in a decision")
+print(f"tree. Using HopSkipJump instead: a decision-boundary attack that only")
+print(f"needs to query predict() — no internal model access required.")
 
 # HopSkipJump — decision-boundary attack, zero gradient required (truly black-box)
+# Works by binary search along the line between a correctly and incorrectly
+# classified point to find the exact decision boundary, then moves along it.
+print("")
 print("Running HopSkipJump (black-box, decision-boundary)... ", end="", flush=True)
 hsj = HopSkipJump(
     classifier=art_rf,
@@ -174,15 +176,25 @@ print(f"DeepFool (min-norm):      {df_acc * 100:.1f}%  avg L2 perturbation: {l2_
 # ── 4. Summary ────────────────────────────────────────────────────────────────
 
 print("\n" + "=" * 60)
-print("KEY FINDING")
+print("KEY FINDINGS")
 print("=" * 60)
-print(f"  PGD (iterative, 40 steps) is substantially more powerful than")
-print(f"  single-step FGSM because it searches within the epsilon-ball")
-print(f"  for the worst-case adversarial direction.")
+print(f"  1. ATTACK SELECTION DEPENDS ON MODEL TYPE:")
+print(f"     Random Forest (no gradients) → must use decision-boundary attacks")
+print(f"     Neural Network (differentiable) → gradient attacks (FGSM, PGD)")
+print(f"     In a real assessment, you identify the model type first, then")
+print(f"     pick the right attack family.")
 print(f"")
-print(f"  PGD ε=0.05 vs FGSM ε=0.05 on PyTorch NN:")
-print(f"    FGSM: {fgsm_pt_acc*100:.1f}%  vs  PGD: {pgd_acc*100:.1f}%")
+print(f"  2. PGD >> FGSM on neural networks:")
+print(f"     FGSM ε=0.05:        {fgsm_pt_acc*100:.1f}%")
+print(f"     PGD  ε=0.05/40iter: {pgd_acc*100:.1f}%")
+print(f"     PGD runs FGSM iteratively, staying within the ε-ball —")
+print(f"     it finds the worst-case adversarial direction, not just")
+print(f"     the first-step direction.")
 print(f"")
-print(f"  The standard adversarial robustness benchmark is PGD ε=0.1/40 iters.")
+print(f"  3. DeepFool finds the MINIMUM perturbation needed to cross the")
+print(f"     decision boundary — useful for measuring how 'robust' a model")
+print(f"     is without specifying ε in advance.")
+print(f"")
+print(f"  The standard production robustness benchmark: PGD ε=0.1 / 40 iters.")
 print(f"  If your model survives that, it has meaningful adversarial robustness.")
 print("=" * 60)
