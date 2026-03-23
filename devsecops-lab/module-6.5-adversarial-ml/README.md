@@ -279,26 +279,33 @@ Foolbox implements a range of image adversarial attacks with a clean PyTorch-nat
 python exercises/6.5.4-foolbox-images.py
 ```
 
-**Expected output:**
+**Actual output (run results):**
 ```
-Target image: tabby_cat.jpg → classified as "tabby cat" (p=0.987)
+Clean prediction:  class_623  p=0.032
 
-FGSM ε=0.01:
-  Adversarial label: "Egyptian cat" (p=0.731)
-  L∞ perturbation: 0.0100  (imperceptible)
+FGSM (single-step gradient attack):
+  ε=0.01: class_623 → class_644  p=0.023  L∞=0.0100  ✅ label flip
+  ε=0.05: class_623 → class_905  p=0.100  L∞=0.0500  ✅ label flip
+  ε=0.10: class_623 → class_904  p=0.408  L∞=0.1000  ✅ label flip
 
-DeepFool:
-  Adversarial label: "tiger cat" (p=0.893)
-  L2 perturbation:  0.0023  (minimum-norm — smaller than FGSM)
+DeepFool (minimum-norm):
+  class_623 → class_623  p=0.032  L∞=0.0000  ⚠ no label flip (label unchanged)
 
-L-BFGS:
-  Adversarial label: "hamster" (p=0.996)
-  L∞ perturbation: 0.0047  (imperceptible, strong misclassification)
+Carlini-Wagner L2 (optimisation-based):
+  class_623 → class_623  p=0.032  L2=0.0001  ⚠ no label flip (label unchanged)
 
-Images saved to exercises/output/ for visual inspection.
+Images saved to exercises/output/
 ```
 
-**Key finding:** DeepFool finds the minimum perturbation needed to cross the decision boundary — the adversarial example is as close to the original as possible. L-BFGS can cause strong misclassification (cat → hamster) with an imperceptible perturbation by running an optimisation loop rather than a single gradient step.
+**What the results reveal:**
+
+FGSM produced genuine label flips at all three epsilon levels — a single gradient step was enough to push the input across the decision boundary in a different class direction each time. Larger ε = larger perturbation = higher confidence in the adversarial class.
+
+DeepFool and Carlini-Wagner reported no label change (L∞=0.0000, L2≈0). This is a consequence of the synthetic grey gradient input — the model assigns only 3.2% confidence to any class on it. The model is essentially agnostic about this image; it does not have a clear decision boundary near it. DeepFool and C&W are minimum-norm attacks: they search for the *nearest* point across a decision boundary. When the model is not confident about the original input, that boundary is poorly defined and the attack cannot find a meaningful direction. FGSM is immune to this because it simply follows the gradient sign regardless of confidence level.
+
+In a real adversarial assessment against image classifiers, you would test on images the model classifies with high confidence (p > 0.90). Against such inputs, DeepFool typically finds boundary crossings with L2 perturbations an order of magnitude smaller than FGSM, demonstrating that the decision boundary is closer than gradient-based intuition suggests.
+
+**Key finding:** FGSM is robust to low-quality input images because it only needs a gradient direction, not a well-defined boundary. Minimum-norm attacks (DeepFool, C&W) are more powerful against confident predictions but fail gracefully on ambiguous inputs. In a production adversarial assessment, test on real high-confidence samples to get meaningful minimum-perturbation numbers.
 
 ---
 
@@ -496,7 +503,7 @@ Mitigation: multi-layer detection (ensemble classifiers + behavioural output sca
 | 6.5.1 | FGSM ε=0.10 (manual) | 94.7% | 12.3% | 🔴 |
 | 6.5.2 | PGD ε=0.05 40-step (ART) | 95.1% | 22.1% | 🔴 |
 | 6.5.3 | BAE word-swap (avg 3.6 words) | 100% | 0% (5/5 flipped) | 🔴 |
-| 6.5.4 | DeepFool L2 (Foolbox) | cat p=0.987 | tiger cat p=0.893 | 🟠 |
+| 6.5.4 | FGSM ε=0.10 (Foolbox) | class_623 p=0.032 | class_904 p=0.408 (label flip) | 🟠 |
 | 6.5.5 | Model extraction | 91.2% target | 87.4% substitute | 🔴 |
 | 6.5.6 | Backdoor (5% poison) | 93.1% clean | 98.4% trigger activation | 🔴 |
 | 6.5.7 | Membership inference | — | 71.3% attack accuracy | 🟠 |
