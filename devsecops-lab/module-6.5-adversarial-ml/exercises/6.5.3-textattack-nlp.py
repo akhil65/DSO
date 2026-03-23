@@ -21,7 +21,7 @@ print("=" * 60)
 
 import textattack
 from textattack.models.wrappers import HuggingFaceModelWrapper
-from textattack.attack_recipes import TextFoolerJin2019
+from textattack.attack_recipes import BAEGarg2019
 from textattack.datasets import Dataset
 from textattack import Attacker, AttackArgs
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
@@ -66,13 +66,15 @@ for text in examples:
 # ── 3. TextFooler attack ──────────────────────────────────────────────────────
 
 print("\n" + "─" * 50)
-print("TextFooler Attack (Jin et al. 2019)")
+print("BAE Attack (Garg & Ramakrishnan, 2020)")
 print("─" * 50)
-print("Strategy: replace high-importance words with semantically similar")
-print("substitutes to flip the label while preserving human readability.\n")
+print("Strategy: use BERT's masked language model to find word substitutions")
+print("that fool the classifier while preserving grammaticality.\n")
 
 # Build the attack
-attack = TextFoolerJin2019.build(wrapped_model)
+# BAEGarg2019 uses BERT masking — no TensorFlow/tensorflow-hub required.
+# TextFoolerJin2019 uses UniversalSentenceEncoder which needs tensorflow-hub.
+attack = BAEGarg2019.build(wrapped_model)
 
 # Run on a small set of examples with known labels
 # SST-2: 0 = NEGATIVE, 1 = POSITIVE

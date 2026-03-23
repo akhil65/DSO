@@ -110,6 +110,34 @@ python -c "import textattack; print('TextAttack OK')"
 
 ---
 
+## ML Terms for Security Practitioners
+
+You do not need an ML background to run these exercises. This section translates the key ML concepts into security language so the outputs make sense.
+
+**Features** — the input columns. For the breast cancer dataset, features are 30 cell measurements (radius, texture, smoothness, etc.). For a malware classifier, features would be things like entropy of the PE file, number of syscalls, presence of suspicious strings. The model takes all features together and produces a prediction. Think of it as the data fields you'd see in a SIEM alert — each field is a feature.
+
+**Normalisation (StandardScaler)** — re-scaling all features so they live in the same range (roughly -3 to +3). Without it, a feature measured in millimetres and a feature measured in kilobytes would have wildly different scales, and the model would weight the larger-numbered feature more heavily by accident. In security: like normalising severity scores across different scanners before feeding them into a risk engine.
+
+**Binary classification** — the model outputs one of two labels. In these exercises: malignant/benign, spam/ham, member/non-member. The model scores every input on a 0–1 probability scale and a threshold (typically 0.5) converts that to a label. LLM Guard's injection scanner is a binary classifier: injection/not-injection, with a default threshold of 0.5.
+
+**Training accuracy vs test accuracy** — you train the model on a labelled dataset (training set), then measure accuracy on data it has never seen (test set). The gap between the two is the overfitting signal. A model with 99% training accuracy and 65% test accuracy has memorised its training data rather than learned a generalisable pattern. Large gap = privacy risk (membership inference attack). Small gap = model generalises well.
+
+**Gradient** — the direction and rate of change of the loss function with respect to some variable. During training, you compute the gradient with respect to the model's *weights* and step in the direction that reduces loss — this is how the model learns. During an FGSM attack, you compute the gradient with respect to the *input* and step in the direction that *increases* loss — this is how you fool the model. Think of the gradient as a compass that points toward the steepest slope. Training walks downhill (reduces loss). An adversarial attack walks uphill from the input side.
+
+**Epochs** — one complete pass through the entire training dataset. Training for 300 epochs means the model has seen every training sample 300 times, adjusting its weights slightly after each pass. More epochs = more refined weights, but also higher risk of overfitting.
+
+**Epsilon (ε)** — the perturbation budget for adversarial attacks. It controls how far you are allowed to move the input from its original value. ε=0.01 is a very small nudge (often imperceptible). ε=0.30 is a large shove (may visibly distort image inputs). In security terms: it is the maximum allowable deviation between the clean input and the adversarial input. A small ε with a successful attack means the model is very brittle at its decision boundary.
+
+**Decision boundary** — the invisible line (or hyperplane in high dimensions) that separates the model's positive prediction region from its negative prediction region. Every adversarial attack is fundamentally about moving an input across this boundary. FGSM moves in one gradient step. PGD makes 40 iterative steps. HopSkipJump uses binary search along the line between a correctly and incorrectly classified point. DeepFool finds the point on the boundary that is closest to the original input.
+
+**Fidelity (model extraction)** — how often the substitute model (stolen copy) agrees with the original target model on unseen inputs. 95% fidelity means the substitute and target give the same answer 95% of the time. This is different from accuracy against true labels — it measures agreement with the target, not correctness.
+
+**Attack advantage (membership inference)** — the attacker's performance above the random baseline of 50%. An attack accuracy of 53.9% = +3.9% advantage (weak signal, model is well-regularised). An attack accuracy of 71.3% = +21.3% advantage (strong signal, model has memorised its training data). Random guess baseline is always 50% because the evaluation set is always balanced (50% members, 50% non-members).
+
+**Confidence score** — the probability the model assigns to its prediction. A score of 0.99 means the model is 99% confident in its answer. Adversarial attacks typically push confidence scores down (the model becomes uncertain at the boundary). Membership inference attacks exploit the fact that confidence is higher on training samples than on unseen samples.
+
+---
+
 ## Exercises Overview
 
 | # | Exercise | Attack Family | ATLAS ID | Target | Tooling |
@@ -465,12 +493,13 @@ Mitigation: multi-layer detection (ensemble classifiers + behavioural output sca
 
 | Issue | Fix |
 |-------|-----|
-| `ImportError: cannot import name 'FastGradientMethod'` | `pip install adversarial-robustness-toolbox[pytorch,sklearn]` — base ART install excludes framework extras |
-| TextAttack model download slow (first run) | HuggingFace downloads `distilbert-sst2` on first run (~250MB) — needs internet; cached after first run |
-| Foolbox: `TypeError: __call__() got an unexpected keyword argument` | Use Foolbox ≥ 3.3.0 — API changed from v2 to v3; `model(inputs)` → `fmodel(inputs, labels)` |
-| ART `MembershipInferenceBlackBox` requires equal train/test size | Pass `x_train_for_attack` and `x_test_for_attack` as same-size balanced arrays |
+| `zsh: no matches found: adversarial-robustness-toolbox[pytorch,sklearn]` | zsh treats `[` as a glob character. Quote it: `pip install "adversarial-robustness-toolbox[pytorch,sklearn]"` |
+| Exercise 6.5.2: `EstimatorError: FastGradientMethod requires LossGradientsMixin` | FGSM needs gradients. Random Forest is a set of if/else decision trees — no gradients exist. Use HopSkipJump for tree-based models instead. Script was updated to reflect this. |
+| Exercise 6.5.5: substitute model stuck at ~37% accuracy | Used random noise as query inputs. Random noise doesn't match the real data distribution, so the substitute model cannot generalise. Fix: query the target using real-domain inputs (samples from X_train). |
+| Exercise 6.5.5: `LogisticRegression.fit() got unexpected keyword argument 'batch_size'` | ART CopycatCNN calls `fit(batch_size=...)` which is a neural network API. Sklearn models don't support it. Fix: replace the sklearn substitute with a PyTorch NN wrapped in `PyTorchClassifier`. |
+| Exercise 6.5.3: `LookupError: Resource 'averaged_perceptron_tagger_eng' not found` | TextAttack needs this NLTK resource. Fix: `python -c "import nltk; nltk.download('averaged_perceptron_tagger_eng')"` |
+| Exercise 6.5.3: `ModuleNotFoundError: No module named 'tensorflow_hub'` | `TextFoolerJin2019` uses Google's UniversalSentenceEncoder (a TensorFlow model) to constrain substitutions. This requires `tensorflow-hub` (~500MB TF install). Fix: swap to `BAEGarg2019` (BERT-based, no TensorFlow dependency). Script updated. |
 | llm-guard `scan()` slow on CPU for Exercise 6.5.8 | Expected — DeBERTa inference is ~200ms/call on CPU. MPS (Apple Silicon) is ~40ms. Normal. |
-| Exercise 6.5.3 `textattack` conflicts with llm-guard deps | If conflict: `pip install textattack --no-deps` then install missing deps individually |
 
 ---
 
