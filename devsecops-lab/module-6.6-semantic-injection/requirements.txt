@@ -1,0 +1,16 @@
+# Module 6.6 — Semantic Injection & RAG Poisoning
+# Install into llm-guard-env:
+#   conda activate llm-guard-env
+#   pip install -r requirements.txt
+
+# Vector store for RAG pipeline (Exercise 6.6.1)
+chromadb>=0.4.0
+
+# Embedding model — lightweight, no GPU required
+sentence-transformers>=2.2.0
+
+# HTTP client for Ollama API calls (already in env — listed for clarity)
+requests>=2.31.0
+
+# LLM Guard — already installed in llm-guard-env (listed for clarity)
+# llm-guard>=0.3.0
