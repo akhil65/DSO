@@ -55,3 +55,8 @@ msf_history
 
 # Semgrep cache
 .semgrep/
+
+# R artifacts
+.Rhistory
+.RData
+.Rproj.user/
