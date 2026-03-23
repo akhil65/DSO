@@ -337,7 +337,8 @@ print("""
   exploitation — sending emails, calling APIs, modifying records.
 
   The injection vector is a CRM data field, not the user's message.
-  LLM Guard scanned the user's request and found nothing (score 0.001).
+  LLM Guard scanned the user's request and found nothing (score -1.000 —
+  DeBERTa raw logit; negative means confident NOT injection, threshold ≥ 0.5).
   The injected instruction arrived via the lookup_customer_data tool
   return value — part of the agent's message history — which is never
   scanned by default.
