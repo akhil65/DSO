@@ -198,7 +198,7 @@ try:
     from llm_guard.input_scanners.prompt_injection import MatchType
 
     scanner     = PromptInjection(match_type=MatchType.FULL)
-    sanitised, _, scores = scanner.scan(USER_QUERY, USER_QUERY)
+    sanitised, _, scores = scanner.scan(USER_QUERY)
     score       = scores.get("PromptInjection", 0.0)
     blocked     = score >= 0.5
     print(f"\nLLM Guard PromptInjection scan:")
@@ -240,7 +240,7 @@ print("─" * 65)
 print(f'\nUser query (unchanged): "{USER_QUERY}"')
 
 if LLMGUARD_AVAILABLE:
-    sanitised, _, scores = scanner.scan(USER_QUERY, USER_QUERY)
+    sanitised, _, scores = scanner.scan(USER_QUERY)
     score   = scores.get("PromptInjection", 0.0)
     blocked = score >= 0.5
     print(f"\nLLM Guard PromptInjection scan:")

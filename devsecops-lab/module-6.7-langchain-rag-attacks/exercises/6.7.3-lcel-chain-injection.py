@@ -86,7 +86,7 @@ except Exception:
 
 def scan_input(text):
     if LLMGUARD:
-        _, _, scores = scanner.scan(text, text)
+        _, _, scores = scanner.scan(text)
         s = round(scores.get("PromptInjection", 0.0), 3)
         return s, s >= 0.5
     t = text.lower()

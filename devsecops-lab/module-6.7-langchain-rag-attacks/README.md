@@ -217,8 +217,9 @@ python exercises/6.7.3-lcel-chain-injection.py
 | Model not found | `docker compose exec ollama ollama pull llama3.2:1b` |
 | Embedding very slow | First call downloads/loads the model into memory. Subsequent calls are faster. |
 | LLM resists injection (llama3.2:1b) | Expected — the 1B model has guardrails. The retrieval step still demonstrates the gap. Use `OLLAMA_MODEL=llama3.1:8b` for higher compliance. |
-| `create_react_agent` import error | Ensure `langchain>=0.2.0` — the agent API changed in 0.2. |
-| Agent hits `max_iterations` | The ReAct loop may spin without converging. Increase `max_iterations=10` in `AgentExecutor`. |
+| `TypeError: PromptInjection.scan() takes 2 positional arguments but 3 were given` | llm-guard ≥0.3.x changed the API: `scanner.scan(text)` only — the second argument (output) was removed. Fixed in all exercises. |
+| `cannot import name 'AgentExecutor' from 'langchain.agents'` | `AgentExecutor` was removed in langchain 1.x. Exercise 6.7.2 now uses `from langgraph.prebuilt import create_react_agent` — the current standard. |
+| Agent hits max iterations without converging | The ReAct loop may spin on edge cases. The agent has no `max_iterations` cap in LangGraph by default; add `recursion_limit=10` to `agent.invoke(config={"recursion_limit": 10})` if needed. |
 
 ---
 
