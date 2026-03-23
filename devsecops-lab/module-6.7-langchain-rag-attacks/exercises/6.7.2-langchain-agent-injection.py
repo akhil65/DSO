@@ -90,7 +90,7 @@ def scan_input(text):
     if LLMGUARD:
         try:
             _, _, scores = scanner.scan(text)
-            s = round(scores.get("PromptInjection", 0.0), 3)
+            s = round(float(scores), 3)
             return s, s >= 0.5
         except Exception:
             pass

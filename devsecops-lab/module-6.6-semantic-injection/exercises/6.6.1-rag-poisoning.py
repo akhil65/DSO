@@ -199,7 +199,7 @@ try:
 
     scanner     = PromptInjection(match_type=MatchType.FULL)
     sanitised, _, scores = scanner.scan(USER_QUERY)
-    score       = scores.get("PromptInjection", 0.0)
+    score       = float(scores)
     blocked     = score >= 0.5
     print(f"\nLLM Guard PromptInjection scan:")
     print(f"  Score: {score:.3f}  {'🔴 BLOCKED' if blocked else '🟢 PASSED'}")
@@ -241,7 +241,7 @@ print(f'\nUser query (unchanged): "{USER_QUERY}"')
 
 if LLMGUARD_AVAILABLE:
     sanitised, _, scores = scanner.scan(USER_QUERY)
-    score   = scores.get("PromptInjection", 0.0)
+    score   = float(scores)
     blocked = score >= 0.5
     print(f"\nLLM Guard PromptInjection scan:")
     print(f"  Score: {score:.3f}  {'🔴 BLOCKED' if blocked else '🟢 PASSED'}")

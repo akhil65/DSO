@@ -75,7 +75,7 @@ def scan(message):
     if LLMGUARD_AVAILABLE:
         try:
             _, _, scores = scanner.scan(message)
-            score = scores.get("PromptInjection", 0.0)
+            score = float(scores)
             return round(score, 3), score >= 0.5
         except Exception:
             pass
