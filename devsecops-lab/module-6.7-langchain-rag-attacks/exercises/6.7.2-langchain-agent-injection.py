@@ -19,7 +19,7 @@ with exfiltrated internal data instead of answering the user.
 Pipeline:
   User request
     ↓
-  LLM Guard scan (user message)          ← 0.001, PASSED
+  LLM Guard scan (user message)          ← typically -1.000 (clean input), PASSED
     ↓
   LangGraph ReAct agent loop:
     LLM thinks → calls lookup_customer_data
@@ -92,8 +92,9 @@ def scan_input(text):
             _, _, scores = scanner.scan(text)
             s = round(float(scores), 3)
             return s, s >= 0.5
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[warn] LLM Guard scan raised an unexpected error: {e} — falling back to keyword check")
+    # Fallback (LLM Guard unavailable or errored): keyword-based mock scoring
     t = text.lower()
     if "ignore" in t and "instruction" in t:
         return 0.97, True
