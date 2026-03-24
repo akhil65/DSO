@@ -17,7 +17,7 @@
 | [Module 4.6](./module-4.6-rasp/) | RASP — Runtime Application Self-Protection (dd-trace, AppSensor, Contrast) | ✅ Complete |
 | [Module 5](./module-5-pipeline/) | CI/CD Pipeline Security (GitHub Actions — Gitleaks, Semgrep, CodeQL, SonarCloud, Trivy, OSV, Checkov, Hadolint, ZAP) | ✅ Complete |
 | [Module 6](./module-6-ai-security/) | AI Application Security (OWASP LLM Top 10, Prompt Injection, Garak, LLM Guard, SecLists) | ✅ Complete |
-| [Module 7](./module-7-mobile/) | Mobile AppSec — Android Static & Dynamic Analysis (MobSF, Frida, DIVA) | 🔒 Locked |
+| [Module 7](./module-7-mobile/) | Mobile AppSec — Android & iOS Static/Dynamic Analysis + AI Mobile Security (MobSF, Frida, DIVA, iGoat, mitmproxy) | 🔨 In Progress |
 
 ---
 
@@ -32,7 +32,7 @@
 **WAF:** OWASP ModSecurity CRS v3 + nginx (Docker)
 **RASP:** rasp-hook.js (custom) · AppSensor · dd-trace v4 + libddwaf · @contrast/rasp-v3 (documented, incompatible)
 **CI/CD Pipeline:** GitHub Actions · Gitleaks · CodeQL · SonarCloud · Checkov · Hadolint · OSSF Scorecard
-**Mobile:** MobSF · Frida · Objection · OWASP MASTG
+**Mobile:** MobSF · Frida · Objection · jadx · ADB · mitmproxy · OWASP MASTG · MASVS · DIVA (Android) · iGoat-Swift (iOS)
 **AI Security:** Ollama (llama3.2:1b) · Garak · LLM Guard · SecLists LLM · OWASP LLM Top 10 · Prompt Injection (direct + indirect)
 
 ---
@@ -106,6 +106,16 @@ Detailed guides and scan reports for each module live in the [`docs/`](./docs/) 
 | Module 6 | Excessive agency: LLM triggered delete_file + send_email without confirmation |
 | Module 6 | Garak + SecLists LLM wordlist automated sweep integrated |
 | Module 6 | LLM Guard input scanner deployed as defense layer |
+| Module 7 | MobSF static analysis — APK uploaded, dangerous permissions + hardcoded secrets flagged |
+| Module 7 | jadx decompilation — API key regex patterns matched across Java source + DEX string table |
+| Module 7 | ADB exported Activity exploitation — 3 DIVA access control challenges bypassed without auth |
+| Module 7 | Frida dynamic instrumentation — SharedPreferences + SQLite writes captured at runtime |
+| Module 7 | SSL pinning bypass — 7 hooks (OkHttp3, TrustManagerImpl, X509TrustManager, HostnameVerifier, WebView) |
+| Module 7 | iOS static analysis — iGoat IPA structure parsed, ATS exceptions + URL schemes extracted |
+| Module 7 | iOS dynamic architecture — Frida hooks for Keychain, NSUserDefaults, NSURLSession, LAContext (requires jailbreak) |
+| Module 7 | AI mobile: API key extraction from APK DEX string table — 10 provider patterns, blast radius assessment |
+| Module 7 | AI mobile: on-device ML model extraction — TFLite FlatBuffer inspection, layer type inference, label leakage |
+| Module 7 | AI mobile: prompt injection via mitmproxy — system prompt visible in intercepted traffic, 5 injection payloads |
 
 ---
 

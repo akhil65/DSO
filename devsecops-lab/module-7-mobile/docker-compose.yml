@@ -1,0 +1,52 @@
+# Module 7 — Mobile AppSec
+# Services: MobSF (static + dynamic analysis), mitmproxy (traffic interception)
+#
+# Usage:
+#   docker compose up -d mobsf          # static analysis only
+#   docker compose up -d mobsf mitmproxy # + traffic interception for 7.5 / 7.10
+#
+# MobSF UI:   http://localhost:8000   (default creds: mobsf / mobsf)
+# mitmproxy:  http://localhost:8081   (web UI)
+#             proxy on localhost:8080 (configure emulator proxy to this)
+
+services:
+
+  # ── MobSF ────────────────────────────────────────────────────────────────
+  # Mobile Security Framework — static + dynamic analysis for Android APK and iOS IPA
+  # Docs: https://mobsf.github.io/Mobile-Security-Framework-MobSF/
+  mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    container_name: mobsf
+    ports:
+      - "8000:8000"      # Web UI + REST API
+      - "1337:1337"      # Dynamic analysis port (Android emulator frida server)
+    volumes:
+      - mobsf_data:/home/mobsf/.MobSF          # Persistent scan history
+      - ./targets:/targets:ro                   # Mount APK/IPA targets read-only
+    environment:
+      - MOBSF_API_KEY=mobsfapikey1234567890     # Override default random key for scripting
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── mitmproxy ────────────────────────────────────────────────────────────
+  # Intercept HTTPS traffic from Android emulator (exercises 7.5 and 7.10)
+  # Install mitmproxy CA cert on emulator: adb push ~/.mitmproxy/mitmproxy-ca-cert.pem /sdcard/
+  mitmproxy:
+    image: mitmproxy/mitmproxy:latest
+    container_name: mitmproxy
+    ports:
+      - "8080:8080"      # Proxy port (configure emulator HTTP proxy to this)
+      - "8081:8081"      # mitmweb UI
+    volumes:
+      - mitmproxy_data:/home/mitmproxy/.mitmproxy
+      - ./scripts/mitmproxy:/scripts:ro
+    command: mitmweb --web-host 0.0.0.0 --web-port 8081 --listen-host 0.0.0.0 --listen-port 8080
+    restart: unless-stopped
+
+volumes:
+  mobsf_data:
+  mitmproxy_data:

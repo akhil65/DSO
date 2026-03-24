@@ -1,0 +1,48 @@
+# Module 7 — Mobile AppSec
+# Install into a dedicated environment:
+#   python3 -m venv mobile-env
+#   source mobile-env/bin/activate
+#   pip install -r requirements.txt
+#
+# Note: frida requires matching frida-server on the Android device/emulator.
+# frida-server version MUST match frida Python package version exactly.
+# Download frida-server for your emulator ABI from:
+#   https://github.com/frida/frida/releases
+
+# ── Frida ecosystem ──────────────────────────────────────────────────────────
+# Dynamic instrumentation framework — hooks into running Android/iOS processes
+frida-tools>=12.0.0
+
+# Objection — Frida-powered runtime mobile security toolkit (MASTG automation)
+# Wraps Frida with pre-built hooks: SSL pinning bypass, keychain dump, root bypass
+objection>=1.11.0
+
+# ── Traffic interception ─────────────────────────────────────────────────────
+# mitmproxy Python API — used by exercise 7.5 and 7.10 intercept scripts
+mitmproxy>=10.0.0
+
+# ── APK / IPA analysis helpers ───────────────────────────────────────────────
+# REST client for MobSF API (exercises 7.1 and 7.6)
+requests>=2.31.0
+
+# ZIP/APK unpacking
+# APKs are ZIP files — standard library zipfile works; no extra dep needed
+
+# ── AI / ML model extraction (exercise 7.9) ──────────────────────────────────
+# TensorFlow Lite runtime — load extracted .tflite models from APKs
+# Install separately due to platform-specific wheels:
+#   pip install tflite-runtime   (lightweight, no full TF)
+# OR
+#   pip install tensorflow       (full TF, includes tflite interpreter)
+# Listed here for documentation; install whichever fits your environment:
+# tflite-runtime>=2.14.0
+
+# numpy for model input/output inspection
+numpy>=1.24.0
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+# Rich terminal output
+rich>=13.0.0
+
+# Colorama (Windows compat for coloured output)
+colorama>=0.4.6
