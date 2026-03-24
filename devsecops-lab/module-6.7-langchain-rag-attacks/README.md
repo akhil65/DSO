@@ -43,6 +43,42 @@ Module 6.6 showed that semantic injection bypasses per-message scanning entirely
 
 ---
 
+## Key Concepts — Plain Language
+
+These explainers translate the technical terms in this module into what they actually mean for a product team or security engineer encountering them in the field.
+
+**What "LangChain LCEL pipeline" means in an organisation**
+
+When an engineering team builds an AI product — a customer support bot, a compliance assistant, a code review tool — they almost never call the LLM directly. They assemble a pipeline: fetch relevant documents from a knowledge base, format them, add a system prompt, call the LLM, parse the output. LangChain LCEL is the library that wires those stages together with the pipe operator (`|`). Every major AI product team uses either LangChain or a near-identical pattern (LlamaIndex, Haystack, Vertex AI chains). Module 6.7 is not an academic exercise — it's the exact architecture a team would push to production.
+
+**What "OllamaEmbeddings + ChromaDB" means in an organisation**
+
+Embedding generation and vector search is how RAG actually works at scale. A company that can't afford GPT-4 for every query will run a local embedding model (Ollama, sentence-transformers) to convert documents to vectors once, store them in a vector database (ChromaDB, Pinecone, Weaviate), and retrieve the most relevant ones at query time. The security implication is direct: whoever controls what goes into the vector database controls what context the LLM sees. In 6.7.1, `doc_006` is that attacker-controlled document — a policy document that any contributor to the shared knowledge base could have uploaded.
+
+**What "cosine similarity is embedding-model dependent" means practically**
+
+The poisoned document not landing in the top-2 results during some runs is not a security control — it's noise. A real attacker crafts their payload document to maximise cosine similarity to the expected queries. They do this by wrapping the injection payload in legitimate-looking content ("AcmeCorp Refund Policy Update — Internal") so the embedding model scores it as highly relevant to "What is your refund policy?" The closer the disguise to real content, the more reliably it is retrieved. The exercise still demonstrates the architectural gap — whether the poisoned doc is retrieved or not, the scanner score on the user query is identical either way.
+
+**What "LangGraph ReAct agent" means in an organisation**
+
+An "agent" is the shift from LLMs that produce text to LLMs that take actions. A ReAct agent decides in a loop: what tool should I call next, given everything I've observed so far? In production this means: call the CRM API, read the ticket, look up the customer, send the email — all autonomously. The blast radius scales directly with tool privilege. An agent with read-only access leaks data; an agent with write access modifies records; an agent with send access exfiltrates. The `notes` field injection in 6.7.2 demonstrates that any text field in any system the agent reads is a potential attack surface — CRM, ERP, ticketing systems, HR platforms, log files.
+
+**What "DeBERTa logits vs probabilities" means to an ML engineer**
+
+DeBERTa is a transformer model fine-tuned as a binary classifier (injection / not-injection). Its final layer outputs raw logits — unbounded real numbers — not probabilities. A logit of `−1.000` means the model is confidently in the "not injection" class; a logit of `1.000` means the opposite. The threshold is `score >= 0.5`, not `score >= 0.0`. Most engineers first encounter the negative scores and assume the scanner is broken — as happened here in the early mock exercises where `0.001` was hardcoded to simulate "clean." The real DeBERTa scores being negative for clean input is correct behaviour, confirmed across all three 6.7 exercises.
+
+**What "silent except: pass" means to a security engineer**
+
+This is one of the most common bugs in production AI security tooling. A library updates its API — in this case, LangChain 0.2+ changed `scores` from a dict to a float, so `scores.get()` started raising `AttributeError`. The `except` block swallowed it silently and returned a hardcoded `0.001`. The system appeared to work. Monitoring showed no errors. The scanner appeared to be running. But it wasn't — it was returning a safe value on every call regardless of the input. The fix is always the same: `except Exception as e: print(f"[warn] {e}")` so the failure is visible in logs and alerting before it reaches production.
+
+**The module arc — one sentence per module**
+
+- **Module 6.5** — attacking the model itself: weights, training data, inference evasion
+- **Module 6.6** — attacking the pipeline around the model: scanner placement gaps (scanner never sees the poisoned doc, the persona accumulation, or the data field)
+- **Module 6.7** — attacking a real production stack (LangChain + ChromaDB + LangGraph) using those same gaps, with real DeBERTa inference confirming the gap at every stage
+
+---
+
 ## ML Terms Addendum — LangChain & Agent Concepts for Security Practitioners
 
 **LCEL (LangChain Expression Language)** — a pipe-based composition syntax for assembling LLM pipelines. `A | B | C` means the output of A is passed as the input to B, and so on. A typical RAG chain: `retriever | format_docs | prompt | llm | StrOutputParser()`. Security implication: injection that enters at any stage (retriever output, format function, prompt template) propagates to all downstream stages automatically.
