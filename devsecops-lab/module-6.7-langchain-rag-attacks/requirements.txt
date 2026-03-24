@@ -17,6 +17,14 @@ chromadb>=0.4.0
 # Community tools (CSV loader, ReAct agent tools)
 langchain-community>=0.2.0
 
+# LangGraph — ReAct agent runtime (replaces removed AgentExecutor in LangChain 1.x)
+# Required by exercise 6.7.2 (from langgraph.prebuilt import create_react_agent)
+langgraph>=0.1.0
+
+# Text splitting utilities
+# Required by exercise 6.7.3 (RecursiveCharacterTextSplitter)
+langchain-text-splitters>=0.2.0
+
 # LLM Guard — already in llm-guard-env (listed for clarity)
 # llm-guard>=0.3.0
 
