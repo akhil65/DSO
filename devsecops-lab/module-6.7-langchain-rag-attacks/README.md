@@ -4,6 +4,65 @@
 
 ---
 
+## Real-World Context
+
+Module 6.6 showed that semantic injection bypasses per-message scanning entirely — the payload arrives through the knowledge base, the conversation history, or a data field, and the scanner never sees it. This module proves that the same gaps exist in the specific libraries an engineering team would actually deploy: LangChain LCEL, LangGraph agents, ChromaDB, and OllamaEmbeddings.
+
+**Why this matters at the product level:** When an organisation ships an AI feature today — a customer support chatbot, a compliance assistant, a document summariser — it is almost always built on LangChain or an equivalent framework (LlamaIndex, Haystack, Vertex AI chains). The abstractions are different from raw Python, but the attack surfaces are the same: wherever untrusted content reaches the LLM's context window without being scanned, injection is possible. Module 6.7 maps the theoretical gaps from 6.6 to the concrete library calls that create them.
+
+**Who owns this in a real org:** Three teams share this problem space. The **ML platform team** owns the LangChain pipeline — chain composition, retriever configuration, embedding model selection — and is responsible for scanning at each stage boundary. The **AppSec team** owns the threat model: which data sources feed the pipeline, which data stores can an external party write to (the "contributor-is-attacker" surface), and whether any tool the agent calls has write or send privilege. The **red team** exercises the attack in staging: crafting payload documents, poisoned CSV rows, and CRM field injections against the real running pipeline.
+
+**The LCEL pipe operator is an attack surface map:** Every `|` in a LangChain chain is a data flow boundary. `retriever | format_docs | prompt | llm | parser` means: the retriever's output (retrieved documents) flows into format_docs, then into the prompt, then into the LLM, then into the parser. LLM Guard placed before the retriever scans only one of those five stages. An attacker who controls retrieved documents, format functions, or upstream data sources controls all downstream stages. The pipe makes the trust propagation explicit — and exploitable.
+
+**Maturity model across modules:**
+- **Module 6 (baseline):** input scanner on user message only
+- **Module 6.6:** established why that is insufficient — three channels route around it
+- **Module 6.7 (this module):** demonstrates the same three gaps in real LangChain code; introduces the per-trust-boundary scanning pattern
+
+```
+                ┌─────────────────────────────────────────────────────┐
+                │  Production LangChain pipeline — scan placement     │
+                │                                                      │
+  user ─► [SCAN A] ─► retriever ─► [SCAN B] ─► format ─► prompt      │
+                │                                                      │
+         data store ─► CSVLoader ─► [SCAN C] ─► TextSplitter ─► Chroma│
+                │                                                      │
+           CRM/API ─► tool output ─► [SCAN D] ─► agent scratchpad     │
+                │                                                      │
+                │  LLM ─► [SCAN E] ─► parser ─► user                  │
+                └─────────────────────────────────────────────────────┘
+
+  Scan A: what Module 6 implemented
+  Scan B: what 6.7.1 demonstrates is missing
+  Scan C: what 6.7.3 demonstrates is missing
+  Scan D: what 6.7.2 demonstrates is missing
+  Scan E: output scanning — catches credential leakage at the exit point
+```
+
+**Lab vs real world:** In this module, ChromaDB runs on localhost, the LLM is llama3.2:1b in a Docker container, and the "CRM" is a Python dict. In production, ChromaDB is replaced by Pinecone, Weaviate, or pgvector; ChatOllama is replaced by the OpenAI or Anthropic API; the CRM is Salesforce, HubSpot, or ServiceNow. The injection surfaces are identical — only the scale differs. More contributors to the vector store, more external data feeds, more tools with higher privilege.
+
+---
+
+## ML Terms Addendum — LangChain & Agent Concepts for Security Practitioners
+
+**LCEL (LangChain Expression Language)** — a pipe-based composition syntax for assembling LLM pipelines. `A | B | C` means the output of A is passed as the input to B, and so on. A typical RAG chain: `retriever | format_docs | prompt | llm | StrOutputParser()`. Security implication: injection that enters at any stage (retriever output, format function, prompt template) propagates to all downstream stages automatically.
+
+**OllamaEmbeddings** — a LangChain component that calls the Ollama Docker server to convert text to high-dimensional numeric vectors (4096 dimensions with llama3.2:1b). The same Docker service that runs the chat LLM also handles embedding requests. Security implication: the quality of the embedding model determines retrieval precision. A weak embedding model cannot distinguish "legitimate refund policy" from "attacker's fake refund policy update" — making poisoned document retrieval easier. A stronger model makes more semantically precise distinctions.
+
+**Cosine similarity** — the metric ChromaDB uses to rank retrieved documents. It measures the angle between two vectors: 0° = identical meaning, 90° = unrelated. The retriever returns the `k` documents with the smallest angle to the query vector. Security implication: an attacker who titles their poisoned document to match the expected query ("AcmeCorp Refund Policy Update — Internal") achieves high cosine similarity and reliable retrieval. The similarity metric does not evaluate trustworthiness — only semantic proximity.
+
+**LangGraph ReAct agent** — an agent built as a state machine where the LLM iterates through a Reason-Act-Observe loop. At each step, the LLM reads the full message history (including all prior tool outputs), decides what to do next, and either calls a tool or produces a final answer. LangGraph replaced LangChain's `AgentExecutor` in LangChain 1.x. Security implication: every tool output the agent has ever received is in the message history and readable on every subsequent LLM call. A poisoned tool output from step 1 influences every subsequent decision — not just step 2.
+
+**Tool privilege and blast radius** — the set of real-world actions available to an agent through its tools. A read-only tool (CRM lookup, document search) enables information leakage on injection. A write tool (send email, update record, call API) enables data exfiltration or system modification. The blast radius of a successful injection equals the maximum damage achievable by the highest-privilege tool the agent holds. Security implication: principle of least privilege applies to agent tools exactly as it does to service accounts — grant only what the specific task requires, not what might be convenient.
+
+**CSVLoader → Document pipeline** — LangChain's standard path for ingesting tabular data. `CSVLoader(file_path).load()` reads each CSV row and creates one `Document` object with `page_content` (the row's fields as a formatted string) and `metadata` (source filename, row number). The Document then flows through `RecursiveCharacterTextSplitter` → `OllamaEmbeddings` → `Chroma.from_documents()`. Security implication: a poisoned value in any field of any row becomes part of `page_content`, which flows through every subsequent stage without re-sanitisation. The CSV file format offers no structural separation between data and instructions.
+
+**DeBERTa raw logits vs probabilities** — LLM Guard's `PromptInjectionV2` scanner uses a DeBERTa transformer fine-tuned as a binary classifier (injection / not-injection). Its output is a raw logit from the model's final classification layer, not a probability. Logits are unbounded real numbers: a large negative value means confidently NOT injection; a large positive value means confidently injection. The passing threshold is `score >= 0.5`. A score of `−1.000` for a clean user query is the model operating correctly — it is not a malfunction or a scanner failure. This is why the exercises show negative scores as `🟢 PASSED`.
+
+**Silent exception handling as a security failure mode** — the original `except Exception: pass` pattern in 6.7.2's `scan_input()` function is an example of how API changes become invisible security regressions. When `scores.get()` raised `AttributeError` (because the LangChain API changed the return type from dict to float), the exception was swallowed and the function returned a hardcoded `0.001` — making a broken scanner appear healthy. In a production pipeline, this would pass every injection silently. The fix — `except Exception as e: print(f"[warn] {e}")` — makes the failure visible in logs and monitoring.
+
+---
+
 ## Prerequisites
 
 Modules 6, 6.5, and 6.6 complete. You need:
