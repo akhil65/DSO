@@ -109,6 +109,8 @@ Detailed guides and scan reports for each module live in the [`docs/`](./docs/) 
 | Module 7 | Module scaffolding complete — 10 exercises, Frida scripts, docker-compose, README (not yet run) |
 | Module 7 | 7.1 — MobSF static analysis: DIVA scored 36/100, 5 HIGH (debuggable, Janus, debug cert, minSdk=15), 7 WARNING (exported APICredsActivity/APICreds2Activity/NotesProvider, raw SQL, external storage write), 0 trackers |
 | Module 7 | 7.2 — jadx decompilation: 651 Java files extracted; HardcodeActivity exposes "vendorsecretkey" in plain Java; APICredsActivity hardcodes API Key/user/pass in TextView onCreate(); Hardcode2Activity delegates to native libdivajni.so (credential not in Java — requires strings on .so); pkey/notespin SharedPreferences key confirmed in AccessControl3Activity |
+| Module 7 | 7.3 — ADB exploitation: APICredsActivity + APICreds2Activity launched without auth; SharedPrefs XML pulled (user=diva, password=123 in plaintext); SQLite DBs confirmed (divanotes.db, ids2); credit card logged in plaintext via diva-log tag (MSTG-STORAGE-3) |
+| Module 7 | 7.4 — Frida dynamic hooks (CLI): storage-interceptor confirmed SharedPreferences.putString fired with key=password/value in real time (MSTG-STORAGE-1); root-detection-bypass spoofed Build.TAGS test-keys→release-keys and Build.FINGERPRINT on load (MSTG-RESILIENCE-1); Python create_script API incompatible with Frida 17 — hooks run via frida -l CLI instead |
 
 ---
 

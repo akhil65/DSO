@@ -242,7 +242,8 @@ def list_processes(frida_module):
     try:
         device = frida_module.get_usb_device(timeout=5)
         processes = device.enumerate_processes()
-        diva = [p for p in processes if DIVA_PACKAGE in p.name]
+        # Frida may return the app label ("Diva") rather than the package name
+        diva = [p for p in processes if DIVA_PACKAGE in p.name or "diva" in p.name.lower()]
         if diva:
             print(f"  DIVA process: PID {diva[0].pid}  ✅")
             return device, diva[0].pid
@@ -284,8 +285,16 @@ def run_hook(device, pid, hook_name: str, script_code: str, duration: int = 10):
             print(f"     [frida error] {message.get('description','')[:100]}")
 
     try:
-        session = device.attach(pid)
-        script  = session.create_script(script_code)
+        # Attach by package name — more reliable Java bridge init in Frida 17
+        session = device.attach(DIVA_PACKAGE)
+        # Write to temp file: frida -l (file mode) initialises Java bridge correctly
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+            f.write(script_code)
+            tmp_path = f.name
+        with open(tmp_path) as f:
+            script = session.create_script(f.read(), name=os.path.basename(tmp_path))
+        os.unlink(tmp_path)
         script.on('message', on_message)
         script.load()
         time.sleep(duration)

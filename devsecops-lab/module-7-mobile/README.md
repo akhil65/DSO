@@ -193,9 +193,10 @@ adb shell "/data/local/tmp/frida-server &"
 | `olsdfgad;lh` credential in `libdivajni.so` native binary — found via `strings` | 🔴 CRITICAL | 7.2 | MSTG-STORAGE-14 | ✅ Confirmed |
 | `pkey/notespin` SharedPreferences key in `AccessControl3Activity` | 🟠 HIGH | 7.2 | MSTG-STORAGE-1 | ✅ Confirmed |
 | Raw SQL construction in `NotesProvider` + `SQLInjectionActivity` | 🟠 HIGH | 7.2 | MSTG-PLATFORM-2 | ✅ Confirmed |
-| SharedPreferences in plaintext — PIN/password stored | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-1 | ⏳ Pending |
-| SQLite database unencrypted | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-2 | ⏳ Pending |
-| Sensitive data in logcat (Log.d with credentials) | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-3 | ⏳ Pending |
+| SharedPreferences in plaintext — `password=bs` intercepted live by Frida + pulled by adb | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-1 | ✅ Confirmed |
+| SQLite databases unencrypted — `divanotes.db` + `ids2` confirmed on disk | 🔴 CRITICAL | 7.3 | MSTG-STORAGE-2 | ✅ Confirmed |
+| Credit card logged in plaintext — `diva-log: Error while processing...4111111111111` | 🔴 CRITICAL | 7.3 | MSTG-STORAGE-3 | ✅ Confirmed |
+| Build.TAGS spoofed test-keys→release-keys — root/debug detection bypassed at hook load | 🟠 HIGH | 7.4 | MSTG-RESILIENCE-1 | ✅ Confirmed |
 | SSL pinning not implemented — all traffic interceptable | 🟠 HIGH | 7.5 | MSTG-NETWORK-4 | ⏳ Pending |
 | ATS exceptions in iGoat Info.plist | 🟠 HIGH | 7.6 | MSTG-NETWORK-2 | ⏳ Pending |
 | LLM API key in APK assets/resources | 🔴 CRITICAL | 7.8 | MSTG-STORAGE-14 | ⏳ Pending |
