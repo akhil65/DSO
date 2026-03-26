@@ -49,7 +49,7 @@ from pathlib import Path
 
 MOBSF_URL   = os.getenv("MOBSF_URL", "http://localhost:8000")
 MOBSF_KEY   = os.getenv("MOBSF_API_KEY", "mobsfapikey1234567890")
-APK_PATH    = os.getenv("APK_PATH", "targets/diva-beta.apk")
+APK_PATH    = os.getenv("APK_PATH", "targets/DivaApplication.apk")
 
 HEADERS = {"Authorization": MOBSF_KEY}
 
@@ -286,8 +286,9 @@ def print_masvs_summary(report: dict):
 def print_key_finding(report: dict):
     print_separator("KEY FINDING")
     score = report.get("appsec", {})
-    grade = score.get("grade", "?") if isinstance(score, dict) else "?"
-    total = score.get("total_trackers", 0) if isinstance(score, dict) else 0
+    # security_score is 0-100; total_trackers is MobSF's signature DB size, not findings count
+    grade = f"{score.get('security_score', '?')}/100" if isinstance(score, dict) else "?"
+    total = score.get("trackers", 0) if isinstance(score, dict) else 0  # actual trackers found
     print(f"""
   Static analysis with MobSF gives a security grade based on:
     Manifest configuration (exported components, debuggable flag,

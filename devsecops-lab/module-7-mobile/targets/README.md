@@ -13,11 +13,14 @@ every major OWASP MASTG weakness category.
 
 ```bash
 # Download DIVA APK (public, ~1.4 MB)
-curl -L -o targets/diva-beta.apk \
-  https://github.com/payatu/diva-android/raw/master/DivaApplication.apk
+# NOTE: payatu/diva-android uses Git LFS — the raw GitHub URL returns a 14-byte
+# pointer file, not the APK. Use the 0xArab mirror which stores the binary directly:
+curl -L -o targets/DivaApplication.apk \
+  "https://raw.githubusercontent.com/0xArab/diva-apk-file/main/DivaApplication.apk"
 
-# Verify (SHA256 should match published hash)
-shasum -a 256 targets/diva-beta.apk
+# Verify it's a real APK (not an HTML error page or LFS pointer):
+file targets/DivaApplication.apk   # → Java archive data (JAR)
+ls -lh targets/DivaApplication.apk  # → ~1.4 MB
 ```
 
 Challenges in DIVA:

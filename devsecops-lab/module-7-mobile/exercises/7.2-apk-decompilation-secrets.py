@@ -48,7 +48,7 @@ import zipfile
 import struct
 from pathlib import Path
 
-APK_PATH    = os.getenv("APK_PATH", "targets/diva-beta.apk")
+APK_PATH    = os.getenv("APK_PATH", "targets/DivaApplication.apk")
 JADX_OUT    = Path("reports/7.2-jadx-output")
 REPORT_OUT  = Path("reports/7.2-decompilation-findings.txt")
 

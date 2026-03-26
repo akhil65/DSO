@@ -17,6 +17,7 @@ services:
   mobsf:
     image: opensecurity/mobile-security-framework-mobsf:latest
     container_name: mobsf
+    user: root                 # Mac Docker Desktop creates named volumes as root — this lets MobSF write to them
     ports:
       - "8000:8000"      # Web UI + REST API
       - "1337:1337"      # Dynamic analysis port (Android emulator frida server)

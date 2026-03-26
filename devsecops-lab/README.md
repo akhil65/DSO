@@ -106,16 +106,9 @@ Detailed guides and scan reports for each module live in the [`docs/`](./docs/) 
 | Module 6 | Excessive agency: LLM triggered delete_file + send_email without confirmation |
 | Module 6 | Garak + SecLists LLM wordlist automated sweep integrated |
 | Module 6 | LLM Guard input scanner deployed as defense layer |
-| Module 7 | MobSF static analysis — APK uploaded, dangerous permissions + hardcoded secrets flagged |
-| Module 7 | jadx decompilation — API key regex patterns matched across Java source + DEX string table |
-| Module 7 | ADB exported Activity exploitation — 3 DIVA access control challenges bypassed without auth |
-| Module 7 | Frida dynamic instrumentation — SharedPreferences + SQLite writes captured at runtime |
-| Module 7 | SSL pinning bypass — 7 hooks (OkHttp3, TrustManagerImpl, X509TrustManager, HostnameVerifier, WebView) |
-| Module 7 | iOS static analysis — iGoat IPA structure parsed, ATS exceptions + URL schemes extracted |
-| Module 7 | iOS dynamic architecture — Frida hooks for Keychain, NSUserDefaults, NSURLSession, LAContext (requires jailbreak) |
-| Module 7 | AI mobile: API key extraction from APK DEX string table — 10 provider patterns, blast radius assessment |
-| Module 7 | AI mobile: on-device ML model extraction — TFLite FlatBuffer inspection, layer type inference, label leakage |
-| Module 7 | AI mobile: prompt injection via mitmproxy — system prompt visible in intercepted traffic, 5 injection payloads |
+| Module 7 | Module scaffolding complete — 10 exercises, Frida scripts, docker-compose, README (not yet run) |
+| Module 7 | 7.1 — MobSF static analysis: DIVA scored 36/100, 5 HIGH (debuggable, Janus, debug cert, minSdk=15), 7 WARNING (exported APICredsActivity/APICreds2Activity/NotesProvider, raw SQL, external storage write), 0 trackers |
+| Module 7 | 7.2 — jadx decompilation: 651 Java files extracted; HardcodeActivity exposes "vendorsecretkey" in plain Java; APICredsActivity hardcodes API Key/user/pass in TextView onCreate(); Hardcode2Activity delegates to native libdivajni.so (credential not in Java — requires strings on .so); pkey/notespin SharedPreferences key confirmed in AccessControl3Activity |
 
 ---
 

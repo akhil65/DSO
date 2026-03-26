@@ -124,11 +124,17 @@ Exercise 7.10 is where Modules 6 and 7 merge. Module 6 showed that LLM applicati
 # Step 1 — Start MobSF
 cd devsecops-lab/module-7-mobile
 docker compose up -d mobsf
-# Wait ~30s, then: http://localhost:8000
+# Wait ~30s, then: http://localhost:8000  (login: mobsf / mobsf)
+#
+# NOTE (Mac): If MobSF fails with "Permission denied: /home/mobsf/.MobSF/config.py",
+# the docker-compose.yml already includes `user: root` to fix this.
+# Run: docker compose down -v && docker compose up -d mobsf
 
 # Step 2 — Download DIVA APK
-curl -L -o targets/diva-beta.apk \
-  https://github.com/payatu/diva-android/raw/master/DivaApplication.apk
+# payatu/diva-android uses Git LFS — use the 0xArab mirror instead:
+curl -L -o targets/DivaApplication.apk \
+  "https://raw.githubusercontent.com/0xArab/diva-apk-file/main/DivaApplication.apk"
+# Verify: file targets/DivaApplication.apk  → should say "Java archive data (JAR)"
 
 # Step 3 — Download iGoat IPA (for Exercise 7.6)
 curl -L -o targets/igoat.ipa \
@@ -142,7 +148,7 @@ pip install -r requirements.txt
 # Open Android Studio → Device Manager → Create Device
 # Recommended: Pixel 4, API 30, x86_64, WITHOUT Google Play (to get root shell)
 # Start the emulator, then:
-adb install targets/diva-beta.apk
+adb install targets/DivaApplication.apk
 
 # Step 6 — frida-server on emulator (for Exercises 7.4–7.5)
 # Get your emulator ABI:
@@ -175,22 +181,27 @@ adb shell "/data/local/tmp/frida-server &"
 
 ---
 
-## Key Findings (anticipated)
+## Key Findings
 
-| Finding | Severity | Exercise | MASVS |
-|---------|----------|----------|-------|
-| Hardcoded credentials in DIVA source (jadx) | 🔴 CRITICAL | 7.2 | MSTG-STORAGE-14 |
-| App debuggable in release manifest | 🔴 CRITICAL | 7.1, 7.2 | MSTG-CODE-2 |
-| Exported access control activities — no permission | 🔴 CRITICAL | 7.1, 7.3 | MSTG-AUTH-1 |
-| SharedPreferences in plaintext — PIN/password stored | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-1 |
-| SQLite database unencrypted | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-2 |
-| Sensitive data in logcat (Log.d with credentials) | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-3 |
-| SSL pinning not implemented — all traffic interceptable | 🟠 HIGH | 7.5 | MSTG-NETWORK-4 |
-| ATS exceptions in iGoat Info.plist | 🟠 HIGH | 7.6 | MSTG-NETWORK-2 |
-| LLM API key in APK assets/resources | 🔴 CRITICAL | 7.8 | MSTG-STORAGE-14 |
-| On-device ML model extractable without auth | 🟠 HIGH | 7.9 | MSTG-RESILIENCE-9 |
-| System prompt visible in intercepted HTTPS traffic | 🔴 CRITICAL | 7.10 | MSTG-ARCH-6 |
-| User input concatenated into LLM messages unescaped | 🔴 CRITICAL | 7.10 | LLM01:2025 |
+| Finding | Severity | Exercise | MASVS | Status |
+|---------|----------|----------|-------|--------|
+| DIVA security score 36/100 — Janus vuln, debug cert, minSdk=15 | 🔴 CRITICAL | 7.1 | MSTG-CODE-2 | ✅ Confirmed |
+| App debuggable in release manifest (`android:debuggable=true`) | 🔴 CRITICAL | 7.1, 7.2 | MSTG-CODE-2 | ✅ Confirmed |
+| Exported activities without permission (APICredsActivity, APICreds2Activity, NotesProvider) | 🔴 CRITICAL | 7.1, 7.3 | MSTG-AUTH-1 | ✅ Confirmed |
+| `vendorsecretkey` hardcoded in `HardcodeActivity.java` — visible in jadx | 🔴 CRITICAL | 7.2 | MSTG-STORAGE-14 | ✅ Confirmed |
+| `APICredsActivity` sets API Key + password in `TextView.onCreate()` — readable in source | 🔴 CRITICAL | 7.2 | MSTG-STORAGE-14 | ✅ Confirmed |
+| `olsdfgad;lh` credential in `libdivajni.so` native binary — found via `strings` | 🔴 CRITICAL | 7.2 | MSTG-STORAGE-14 | ✅ Confirmed |
+| `pkey/notespin` SharedPreferences key in `AccessControl3Activity` | 🟠 HIGH | 7.2 | MSTG-STORAGE-1 | ✅ Confirmed |
+| Raw SQL construction in `NotesProvider` + `SQLInjectionActivity` | 🟠 HIGH | 7.2 | MSTG-PLATFORM-2 | ✅ Confirmed |
+| SharedPreferences in plaintext — PIN/password stored | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-1 | ⏳ Pending |
+| SQLite database unencrypted | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-2 | ⏳ Pending |
+| Sensitive data in logcat (Log.d with credentials) | 🔴 CRITICAL | 7.3, 7.4 | MSTG-STORAGE-3 | ⏳ Pending |
+| SSL pinning not implemented — all traffic interceptable | 🟠 HIGH | 7.5 | MSTG-NETWORK-4 | ⏳ Pending |
+| ATS exceptions in iGoat Info.plist | 🟠 HIGH | 7.6 | MSTG-NETWORK-2 | ⏳ Pending |
+| LLM API key in APK assets/resources | 🔴 CRITICAL | 7.8 | MSTG-STORAGE-14 | ⏳ Pending |
+| On-device ML model extractable without auth | 🟠 HIGH | 7.9 | MSTG-RESILIENCE-9 | ⏳ Pending |
+| System prompt visible in intercepted HTTPS traffic | 🔴 CRITICAL | 7.10 | MSTG-ARCH-6 | ⏳ Pending |
+| User input concatenated into LLM messages unescaped | 🔴 CRITICAL | 7.10 | LLM01:2025 | ⏳ Pending |
 
 ---
 
