@@ -1,0 +1,16 @@
+# Binary targets — download via setup instructions, don't commit
+targets/*.apk
+targets/*.ipa
+
+# Generated reports — produced at runtime, not source
+reports/7.8-jadx-output/
+reports/7.9-extracted-models/
+reports/7.10-prompt-injection/
+
+# mitmproxy CA certs — machine-specific
+~/.mitmproxy/
+
+# Python
+__pycache__/
+*.pyc
+mobile-env/

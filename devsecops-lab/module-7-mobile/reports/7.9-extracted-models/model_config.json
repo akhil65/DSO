@@ -1,1 +1,0 @@
-{"model_file": "mobilenet_v2_classifier.tflite", "labels_file": "labels.txt", "input_size": 224, "num_threads": 4, "use_gpu": false, "api_endpoint": "https://api.example.com/classify", "OPENAI_API_KEY": ""}
