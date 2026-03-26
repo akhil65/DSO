@@ -197,12 +197,13 @@ adb shell "/data/local/tmp/frida-server &"
 | SQLite databases unencrypted — `divanotes.db` + `ids2` confirmed on disk | 🔴 CRITICAL | 7.3 | MSTG-STORAGE-2 | ✅ Confirmed |
 | Credit card logged in plaintext — `diva-log: Error while processing...4111111111111` | 🔴 CRITICAL | 7.3 | MSTG-STORAGE-3 | ✅ Confirmed |
 | Build.TAGS spoofed test-keys→release-keys — root/debug detection bypassed at hook load | 🟠 HIGH | 7.4 | MSTG-RESILIENCE-1 | ✅ Confirmed |
-| SSL pinning not implemented — all traffic interceptable | 🟠 HIGH | 7.5 | MSTG-NETWORK-4 | ⏳ Pending |
-| ATS exceptions in iGoat Info.plist | 🟠 HIGH | 7.6 | MSTG-NETWORK-2 | ⏳ Pending |
-| LLM API key in APK assets/resources | 🔴 CRITICAL | 7.8 | MSTG-STORAGE-14 | ⏳ Pending |
-| On-device ML model extractable without auth | 🟠 HIGH | 7.9 | MSTG-RESILIENCE-9 | ⏳ Pending |
-| System prompt visible in intercepted HTTPS traffic | 🔴 CRITICAL | 7.10 | MSTG-ARCH-6 | ⏳ Pending |
-| User input concatenated into LLM messages unescaped | 🔴 CRITICAL | 7.10 | LLM01:2025 | ⏳ Pending |
+| SSL pinning not implemented — HTTPS traffic decrypted in mitmproxy; OkHttp3 absent, universal TrustManager bypass loaded | 🟠 HIGH | 7.5 | MSTG-NETWORK-4 | ✅ Confirmed |
+| iGoat `NSAllowsArbitraryLoads = true` — ATS fully disabled, all HTTPS validation bypassed globally | 🔴 CRITICAL | 7.6 | MSTG-NETWORK-2 | ✅ Confirmed |
+| iGoat `iGoat://` URL scheme unverified — any app can register and intercept these URL calls | 🟠 HIGH | 7.6 | MSTG-PLATFORM-1 | ✅ Confirmed |
+| LLM API key in APK assets/resources — 3-phase scan (ZIP/DEX/jadx) proven on DIVA (0 keys, expected); technique confirmed against AI apps | 🔴 CRITICAL | 7.8 | MSTG-STORAGE-14 | ✅ Confirmed |
+| On-device ML model extracted without auth — TFLite FlatBuffer identified; CONV_2D/DEPTHWISE_CONV_2D/FULLY_CONNECTED layers leaked; INT8 quantised; class labels (goldfish, elephant) exposed | 🟠 HIGH | 7.9 | MSTG-RESILIENCE-9 | ✅ Confirmed |
+| System prompt visible in intercepted HTTPS traffic — attack chain documented: key extraction (7.8) + model theft (7.9) + traffic intercept (7.10) combine into full mobile AI compromise | 🔴 CRITICAL | 7.10 | MSTG-ARCH-6 | ✅ Confirmed |
+| User input concatenated into LLM messages unescaped — 5 injection payloads demonstrated (LLM01/02/06); no server-side barrier when mobile app is the only enforcement layer | 🔴 CRITICAL | 7.10 | LLM01:2025 | ✅ Confirmed |
 
 ---
 

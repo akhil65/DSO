@@ -41,11 +41,12 @@ services:
     container_name: mitmproxy
     ports:
       - "8080:8080"      # Proxy port (configure emulator HTTP proxy to this)
-      - "8081:8081"      # mitmweb UI
+      # mitmweb UI removed — use mitmdump which prints intercepted traffic to docker logs
+      # View live traffic with: docker compose logs -f mitmproxy
     volumes:
       - mitmproxy_data:/home/mitmproxy/.mitmproxy
       - ./scripts/mitmproxy:/scripts:ro
-    command: mitmweb --web-host 0.0.0.0 --web-port 8081 --listen-host 0.0.0.0 --listen-port 8080
+    command: mitmdump --listen-host 0.0.0.0 --listen-port 8080 --ssl-insecure
     restart: unless-stopped
 
 volumes:

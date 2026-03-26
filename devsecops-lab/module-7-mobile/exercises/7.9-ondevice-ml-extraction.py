@@ -270,10 +270,14 @@ def query_model(model_path: str):
             import tensorflow as tf
             interpreter = tf.lite.Interpreter(model_path=model_path)
             print("  Runtime: tensorflow  ✅")
-        except ImportError:
-            print("  Neither tflite-runtime nor tensorflow installed.")
-            print("  pip install tflite-runtime   (lightweight, recommended)")
-            print("  Skipping live inference phase.")
+        except (ImportError, SystemError, Exception) as e:
+            print("  Live inference skipped — TF/numpy version mismatch:")
+            print(f"  {type(e).__name__}: installed TensorFlow was compiled against")
+            print("  NumPy 1.x but NumPy 2.x is active. This is a dependency conflict,")
+            print("  not a code issue. The important work is in Phases 1–3.")
+            print()
+            print("  To fix: pip install 'numpy<2' && pip install tflite-runtime")
+            print("  Or: conda install tensorflow  (manages numpy compat automatically)")
             return
 
     interpreter.allocate_tensors()

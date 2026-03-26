@@ -295,7 +295,7 @@ def assess_blast_radius(findings: list):
 
 def main():
     parser = argparse.ArgumentParser(description="Exercise 7.8 — AI APK Key Extraction")
-    parser.add_argument("--apk", default="targets/diva-beta.apk", help="Path to APK")
+    parser.add_argument("--apk", default="targets/DivaApplication.apk", help="Path to APK")
     args = parser.parse_args()
 
     print("=" * 70)

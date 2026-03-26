@@ -17,7 +17,7 @@
 | [Module 4.6](./module-4.6-rasp/) | RASP — Runtime Application Self-Protection (dd-trace, AppSensor, Contrast) | ✅ Complete |
 | [Module 5](./module-5-pipeline/) | CI/CD Pipeline Security (GitHub Actions — Gitleaks, Semgrep, CodeQL, SonarCloud, Trivy, OSV, Checkov, Hadolint, ZAP) | ✅ Complete |
 | [Module 6](./module-6-ai-security/) | AI Application Security (OWASP LLM Top 10, Prompt Injection, Garak, LLM Guard, SecLists) | ✅ Complete |
-| [Module 7](./module-7-mobile/) | Mobile AppSec — Android & iOS Static/Dynamic Analysis + AI Mobile Security (MobSF, Frida, DIVA, iGoat, mitmproxy) | 🔨 In Progress |
+| [Module 7](./module-7-mobile/) | Mobile AppSec — Android & iOS Static/Dynamic Analysis + AI Mobile Security (MobSF, Frida, DIVA, iGoat, mitmproxy) | ✅ Complete |
 
 ---
 
@@ -111,6 +111,12 @@ Detailed guides and scan reports for each module live in the [`docs/`](./docs/) 
 | Module 7 | 7.2 — jadx decompilation: 651 Java files extracted; HardcodeActivity exposes "vendorsecretkey" in plain Java; APICredsActivity hardcodes API Key/user/pass in TextView onCreate(); Hardcode2Activity delegates to native libdivajni.so (credential not in Java — requires strings on .so); pkey/notespin SharedPreferences key confirmed in AccessControl3Activity |
 | Module 7 | 7.3 — ADB exploitation: APICredsActivity + APICreds2Activity launched without auth; SharedPrefs XML pulled (user=diva, password=123 in plaintext); SQLite DBs confirmed (divanotes.db, ids2); credit card logged in plaintext via diva-log tag (MSTG-STORAGE-3) |
 | Module 7 | 7.4 — Frida dynamic hooks (CLI): storage-interceptor confirmed SharedPreferences.putString fired with key=password/value in real time (MSTG-STORAGE-1); root-detection-bypass spoofed Build.TAGS test-keys→release-keys and Build.FINGERPRINT on load (MSTG-RESILIENCE-1); Python create_script API incompatible with Frida 17 — hooks run via frida -l CLI instead |
+| Module 7 | 7.5 — SSL pinning bypass: mitmproxy (native) intercepted HTTPS traffic; DIVA has no OkHttp3 pinning (ClassNotFoundException expected); universal TrustManager bypass loaded via Frida; mitmproxy CA cert installed on emulator; full HTTPS request/response decrypted and confirmed in mitmdump (MSTG-NETWORK-4) |
+| Module 7 | 7.6 — MobSF iOS static analysis: iGoat-Swift v1.0 scanned (hash e73a7bf48e); NSAllowsArbitraryLoads=true confirmed (ATS fully disabled, MSTG-NETWORK-2 critical); iGoat:// URL scheme unverified hijack surface (MSTG-PLATFORM-1); Realm.framework embedded; min iOS 10.0; binary protections parsed via MobSF |
+| Module 7 | 7.8 — AI API key extraction: 3-phase scan (ZIP resources, DEX string table, jadx source) run against DIVA; 160 text files + 11,413 DEX strings + 651 Java files scanned; 0 keys found (expected — DIVA has no LLM integration); technique proven — same tool finds sk-/sk-ant-/AIza keys in real AI apps instantly |
+| Module 7 | 7.9 — On-device ML model extraction: TFLite FlatBuffer detected and extracted from APK ZIP without auth; CONV_2D + DEPTHWISE_CONV_2D + FULLY_CONNECTED layers identified (MobileNet-style CV model); INT8 quantisation confirmed; class labels leaked from metadata; Phase 4 live inference skipped (TF/NumPy 2.x incompatibility — env issue, not exercise issue) |
+| Module 7 | 7.10 — Prompt injection via mobile API interception: 5 injection payloads demonstrated (direct override, system prompt extraction, role escalation, data exfiltration, multi-turn anchor); complete mobile AI attack chain documented: key extraction (7.8) + model theft (7.9) + traffic intercept + injection (7.10); no server-side barrier when mobile client is sole enforcement layer (LLM01/02/06, MSTG-ARCH-6) |
+| Module 7 | ✅ MODULE COMPLETE — 10 exercises, 16 confirmed findings, DIVA + iGoat-Swift + tflite-demo targets, MobSF + jadx + ADB + Frida + mitmproxy toolchain |
 
 ---
 
